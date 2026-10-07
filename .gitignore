@@ -1,0 +1,39 @@
+# ===== Build & runtime artifacts (后端) =====
+server/build/
+server/bin/
+server/data/
+server/boot.log
+*.class
+*.log
+
+# ===== Gradle =====
+.gradle/
+server/.gradle/
+
+# ===== Node / 前端 =====
+web/node_modules/
+web/dist/
+npm-cache/
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+.settings/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== 本地排查用产物（非源码，勿入库） =====
+diag-encoding.sql
+fix-encoding.sql
+endpoints.txt
+
+# ===== 本地环境变量 / 敏感覆盖（如有） =====
+.env
+.env.local
+application-local.yml
+
+# ===== 本地文档 / 规划（不对外发布） =====
+/DOCS/

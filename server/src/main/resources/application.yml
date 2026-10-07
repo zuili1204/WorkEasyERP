@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: workeasy-erp-server
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/workeasy}
+    username: ${DB_USERNAME:workeasy}
+    password: ${DB_PASSWORD:workeasy123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    # 表结构由 Flyway 管理，JPA 不做 DDL
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    validate-on-migrate: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Shanghai
+
+server:
+  port: 18080
+  servlet:
+    context-path: /api
+
+workeasy:
+  jwt:
+    secret: ${JWT_SECRET:workeasy-dev-secret-please-change-in-production-0123456789}
+    expire-hours: 12
+  audit:
+    enabled: true
+  storage:
+    # 附件落盘目录（相对路径基于服务启动目录）
+    dir: ./data/uploads
