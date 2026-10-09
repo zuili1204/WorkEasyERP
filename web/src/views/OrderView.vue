@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useRoute } from 'vue-router'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { auth } from '../stores/auth'
 import { toast } from '../stores/toast'
 
@@ -115,52 +116,45 @@ onMounted(load)
 
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>订单号</th>
-              <th>{{ isPo ? '供应商' : '客户' }}</th>
-              <th>数量</th>
-              <th>不含税</th>
-              <th>税额</th>
-              <th>价税合计</th>
-              <th v-if="!isPo && !auth.hidden('total_profit')">毛利</th>
-              <th>状态</th>
-              <th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.order_no }}</td>
-              <td>{{ r.party_name }}</td>
-              <td>{{ Number(r.total_qty ?? 0).toFixed(3) }}</td>
-              <td>{{ money(r.total_net) }}</td>
-              <td>{{ money(r.total_tax) }}</td>
-              <td><b>{{ money(r.total_amount) }}</b></td>
-              <td v-if="!isPo && !auth.hidden('total_profit')" :style="Number(r.total_profit ?? 0) < 0 ? 'color: var(--danger)' : ''">
-                {{ money(r.total_profit) }}
-              </td>
-              <td><span class="badge" :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span></td>
-              <td class="op">
-                <a v-if="r.status === 'draft' || r.status === 'rejected'" @click="submitApproval(r)">提交审批</a>
-                <a @click="printOrder(r)">打印</a>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-title="`暂无${title}`"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>订单号</th>
+            <th>{{ isPo ? '供应商' : '客户' }}</th>
+            <th>数量</th>
+            <th>不含税</th>
+            <th>税额</th>
+            <th>价税合计</th>
+            <th v-if="!isPo && !auth.hidden('total_profit')">毛利</th>
+            <th>状态</th>
+            <th class="nosort">操作</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无{{ title }}</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.order_no }}</td>
+          <td>{{ r.party_name }}</td>
+          <td>{{ Number(r.total_qty ?? 0).toFixed(3) }}</td>
+          <td>{{ money(r.total_net) }}</td>
+          <td>{{ money(r.total_tax) }}</td>
+          <td><b>{{ money(r.total_amount) }}</b></td>
+          <td v-if="!isPo && !auth.hidden('total_profit')" :style="Number(r.total_profit ?? 0) < 0 ? 'color: var(--danger)' : ''">
+            {{ money(r.total_profit) }}
+          </td>
+          <td><span class="badge" :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span></td>
+          <td class="op">
+            <a v-if="r.status === 'draft' || r.status === 'rejected'" @click="submitApproval(r)">提交审批</a>
+            <a @click="printOrder(r)">打印</a>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

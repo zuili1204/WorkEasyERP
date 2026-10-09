@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type DepartmentRow, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const PAGE_SIZE = 8
@@ -82,41 +83,35 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th class="sortable" :class="{ on: state.sort.startsWith('name') }" @click="toggleSort('name')">
-                部门<span class="sico"><Icon :name="sortIcon('name')" :size="12" /></span>
-              </th>
-              <th>主管</th>
-              <th class="sortable" :class="{ on: state.sort.startsWith('count') }" @click="toggleSort('count')">
-                人数<span class="sico"><Icon :name="sortIcon('count')" :size="12" /></span>
-              </th>
-              <th class="nosort">状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in data.list" :key="r.id">
-              <td>{{ r.name }}</td>
-              <td>{{ r.managerName || '—' }}</td>
-              <td>{{ r.count }}</td>
-              <td><span class="badge badge-green">正常</span></td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-icon="state.q ? 'search' : 'inbox'"
+        :empty-title="state.q ? `未找到与「${state.q}」匹配的数据` : '暂无部门数据'"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th class="sortable" :class="{ on: state.sort.startsWith('name') }" @click="toggleSort('name')">
+              部门<span class="sico"><Icon :name="sortIcon('name')" :size="12" /></span>
+            </th>
+            <th>主管</th>
+            <th class="sortable" :class="{ on: state.sort.startsWith('count') }" @click="toggleSort('count')">
+              人数<span class="sico"><Icon :name="sortIcon('count')" :size="12" /></span>
+            </th>
+            <th class="nosort">状态</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
-          <div>{{ state.q ? `未找到与「${state.q}」匹配的数据` : '暂无部门数据' }}</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="r in data.list" :key="r.id">
+          <td>{{ r.name }}</td>
+          <td>{{ r.managerName || '—' }}</td>
+          <td>{{ r.count }}</td>
+          <td><span class="badge badge-green">正常</span></td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

@@ -5,7 +5,7 @@ import { api, type PageResult } from '../api'
 import { toast } from '../stores/toast'
 import Icon from '../components/Icon.vue'
 import AppModal from '../components/AppModal.vue'
-import AppPager from '../components/AppPager.vue'
+import TableShell from '../components/TableShell.vue'
 import { ATTENDANCE_STATUS, statusOf } from '../utils/dict'
 import { fmtDateTime } from '../utils/format'
 
@@ -202,40 +202,35 @@ onMounted(async () => {
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th v-for="c in meta.cols" :key="c[0]">{{ c[1] }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <template v-for="c in meta.cols" :key="c[0]">
-                <td v-if="c[0] === 'status'">
-                  <span class="badge" :class="statusOf(ATTENDANCE_STATUS, r.status).cls">
-                    {{ statusOf(ATTENDANCE_STATUS, r.status).text }}
-                  </span>
-                </td>
-                <td v-else-if="c[0] === 'punch_type'">
-                  <span class="badge" :class="r.punch_type === 'in' ? 'badge-green' : 'badge-blue'">
-                    {{ r.punch_type === 'in' ? '上班' : '下班' }}
-                  </span>
-                </td>
-                <td v-else>{{ cell(r, c[0]) }}</td>
-              </template>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th v-for="c in meta.cols" :key="c[0]">{{ c[1] }}</th>
+          </tr>
+        </template>
 
-        <div v-if="loading" class="empty sm"><Icon name="inbox" :size="30" /> 加载中…</div>
-        <div v-else-if="data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无数据</div>
-        </div>
-      </div>
-
-      <AppPager :page="data.page" :pages="totalPages" @go="go" />
+        <tr v-for="(r, i) in data.list" :key="i">
+          <template v-for="c in meta.cols" :key="c[0]">
+            <td v-if="c[0] === 'status'">
+              <span class="badge" :class="statusOf(ATTENDANCE_STATUS, r.status).cls">
+                {{ statusOf(ATTENDANCE_STATUS, r.status).text }}
+              </span>
+            </td>
+            <td v-else-if="c[0] === 'punch_type'">
+              <span class="badge" :class="r.punch_type === 'in' ? 'badge-green' : 'badge-blue'">
+                {{ r.punch_type === 'in' ? '上班' : '下班' }}
+              </span>
+            </td>
+            <td v-else>{{ cell(r, c[0]) }}</td>
+          </template>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

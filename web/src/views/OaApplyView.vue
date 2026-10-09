@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 
 const SIZE = 8
 const route = useRoute()
@@ -146,38 +147,32 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th v-for="c in meta.cols" :key="c[0]">{{ c[1] }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <template v-for="c in meta.cols" :key="c[0]">
-                <td v-if="c[0] === 'status'">
-                  <span class="badge" :class="(STATUS_MAP[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">
-                    {{ (STATUS_MAP[r.status ?? ''] ?? { text: r.status ?? '-' }).text }}
-                  </span>
-                </td>
-                <td v-else>{{ cell(r, c[0]) }}</td>
-              </template>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-icon="state.q ? 'search' : 'inbox'"
+        :empty-title="state.q ? `未找到与「${state.q}」匹配的数据` : '暂无申请记录'"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th v-for="c in meta.cols" :key="c[0]">{{ c[1] }}</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
-          <div>{{ state.q ? `未找到与「${state.q}」匹配的数据` : '暂无申请记录' }}</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <template v-for="c in meta.cols" :key="c[0]">
+            <td v-if="c[0] === 'status'">
+              <span class="badge" :class="(STATUS_MAP[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">
+                {{ (STATUS_MAP[r.status ?? ''] ?? { text: r.status ?? '-' }).text }}
+              </span>
+            </td>
+            <td v-else>{{ cell(r, c[0]) }}</td>
+          </template>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

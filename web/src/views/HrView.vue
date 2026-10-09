@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
-import EmptyState from '../components/EmptyState.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const SIZE = 8
@@ -181,40 +181,37 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th v-for="c in meta.cols" :key="c[0]">{{ c[1] }}</th>
-              <th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <template v-for="c in meta.cols" :key="c[0]">
-                <td v-if="c[0] === 'status'">
-                  <span class="badge" :class="(STATUS_MAP[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">
-                    {{ (STATUS_MAP[r.status ?? ''] ?? { text: r.status ?? '-' }).text }}
-                  </span>
-                </td>
-                <td v-else>{{ cell(r, c[0]) }}</td>
-              </template>
-              <td class="op">
-                <a v-if="kind === 'entry' && r.status === 'pending'" @click="confirm(r)">确认入职</a>
-                <span v-else style="color: var(--text-4)">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-title="暂无记录"
+        empty-desc="点击右上角按钮发起新的申请"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th v-for="c in meta.cols" :key="c[0]">{{ c[1] }}</th>
+            <th class="nosort">操作</th>
+          </tr>
+        </template>
 
-        <EmptyState v-if="!loading && data.total === 0" icon="inbox" title="暂无记录" desc="点击右上角按钮发起新的申请" />
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <template v-for="c in meta.cols" :key="c[0]">
+            <td v-if="c[0] === 'status'">
+              <span class="badge" :class="(STATUS_MAP[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">
+                {{ (STATUS_MAP[r.status ?? ''] ?? { text: r.status ?? '-' }).text }}
+              </span>
+            </td>
+            <td v-else>{{ cell(r, c[0]) }}</td>
+          </template>
+          <td class="op">
+            <a v-if="kind === 'entry' && r.status === 'pending'" @click="confirm(r)">确认入职</a>
+            <span v-else style="color: var(--text-4)">—</span>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

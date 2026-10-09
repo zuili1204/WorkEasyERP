@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
-import EmptyState from '../components/EmptyState.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const SIZE = 8
@@ -101,62 +101,55 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>编号</th>
-              <th>客户名称</th>
-              <th>等级</th>
-              <th>联系人</th>
-              <th>电话</th>
-              <th>授信额度</th>
-              <th>已用</th>
-              <th>账期</th>
-              <th>归属销售</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.code }}</td>
-              <td>{{ r.name }}</td>
-              <td>
-                <span
-                  class="badge"
-                  :class="r.level === 'A' ? 'badge-green' : r.level === 'B' ? 'badge-blue' : 'badge-gray'"
-                >{{ r.level || '—' }}</span>
-              </td>
-              <td>{{ r.contact_name || '—' }}</td>
-              <td>{{ r.contact_phone || '—' }}</td>
-              <td>{{ money(r.credit_limit) }}</td>
-              <td :style="Number(r.credit_used ?? 0) > Number(r.credit_limit ?? 0) ? 'color: var(--danger)' : ''">
-                {{ money(r.credit_used) }}
-              </td>
-              <td>{{ r.payment_terms }} 天</td>
-              <td>{{ r.owner_name || '—' }}</td>
-              <td>
-                <span class="badge" :class="r.status === 'active' ? 'badge-green' : 'badge-gray'">
-                  {{ r.status === 'active' ? '正常' : r.status }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-icon="state.q ? 'search' : 'building'"
+        :empty-title="state.q ? '未找到匹配的客户' : '暂无客户'"
+        :empty-desc="state.q ? `没有与「${state.q}」匹配的客户，换个关键词试试` : '当前数据范围内暂无客户，点击右上角「新增客户」开始录入'"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>编号</th>
+            <th>客户名称</th>
+            <th>等级</th>
+            <th>联系人</th>
+            <th>电话</th>
+            <th>授信额度</th>
+            <th>已用</th>
+            <th>账期</th>
+            <th>归属销售</th>
+            <th>状态</th>
+          </tr>
+        </template>
 
-        <EmptyState
-          v-if="!loading && data.total === 0"
-          :icon="state.q ? 'search' : 'building'"
-          :title="state.q ? '未找到匹配的客户' : '暂无客户'"
-          :desc="state.q ? `没有与「${state.q}」匹配的客户，换个关键词试试` : '当前数据范围内暂无客户，点击右上角「新增客户」开始录入'"
-        />
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.code }}</td>
+          <td>{{ r.name }}</td>
+          <td>
+            <span
+              class="badge"
+              :class="r.level === 'A' ? 'badge-green' : r.level === 'B' ? 'badge-blue' : 'badge-gray'"
+            >{{ r.level || '—' }}</span>
+          </td>
+          <td>{{ r.contact_name || '—' }}</td>
+          <td>{{ r.contact_phone || '—' }}</td>
+          <td>{{ money(r.credit_limit) }}</td>
+          <td :style="Number(r.credit_used ?? 0) > Number(r.credit_limit ?? 0) ? 'color: var(--danger)' : ''">
+            {{ money(r.credit_used) }}
+          </td>
+          <td>{{ r.payment_terms }} 天</td>
+          <td>{{ r.owner_name || '—' }}</td>
+          <td>
+            <span class="badge" :class="r.status === 'active' ? 'badge-green' : 'badge-gray'">
+              {{ r.status === 'active' ? '正常' : r.status }}
+            </span>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

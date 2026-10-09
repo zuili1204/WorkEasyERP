@@ -2,6 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { api, type ReportResult } from '../api'
 import Icon from '../components/Icon.vue'
+import AppPager from '../components/AppPager.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const list = ref<Record<string, string | null>[]>([])
@@ -29,6 +33,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function go(p: number) {
+  page.value = p
+  load()
 }
 
 async function run(id: string) {
@@ -101,16 +110,11 @@ onMounted(async () => {
             <a @click="run(String(r.id))">运行</a>
             <a class="rm" @click="remove(String(r.id))">删除</a>
           </div>
-          <div v-if="!loading && list.length === 0" class="empty sm">
-            <Icon name="inbox" :size="34" /><div>暂无报表定义</div>
-          </div>
+          <LoadingState v-if="loading" />
+          <EmptyState v-else-if="list.length === 0" compact title="暂无报表定义" />
         </div>
 
-        <div class="pager">
-          <span class="pbtn" :class="{ dis: page <= 1 }" @click="page--; load()">‹ 上一页</span>
-          <span>第 {{ page }} / {{ totalPages }} 页</span>
-          <span class="pbtn" :class="{ dis: page >= totalPages }" @click="page++; load()">下一页 ›</span>
-        </div>
+        <AppPager :page="page" :pages="totalPages" @go="go" />
 
         <div class="quick">
           <b>快速预览</b>
@@ -133,18 +137,15 @@ onMounted(async () => {
         </div>
         <template v-else>
           <div class="rt">{{ result.name }}（{{ MODULE_TEXT[result.module] ?? result.module }}）</div>
-          <div class="table-wrap">
-            <table class="list">
-              <thead>
-                <tr><th v-for="(c, i) in result.columns" :key="i">{{ c }}</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, ri) in result.rows" :key="ri">
-                  <td v-for="(cell, ci) in row" :key="ci">{{ cell ?? '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <TableShell :rows="result.rows">
+            <template #head>
+              <tr><th v-for="(c, i) in result.columns" :key="i">{{ c }}</th></tr>
+            </template>
+
+            <tr v-for="(row, ri) in result.rows" :key="ri">
+              <td v-for="(cell, ci) in row" :key="ci">{{ cell ?? '—' }}</td>
+            </tr>
+          </TableShell>
         </template>
       </div>
     </div>

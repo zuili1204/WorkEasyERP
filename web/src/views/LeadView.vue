@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
-import EmptyState from '../components/EmptyState.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const SIZE = 8
@@ -92,39 +92,33 @@ onMounted(load)
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
       <p v-if="notice" class="ok">{{ notice }}</p>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr><th>编号</th><th>线索名称</th><th>来源</th><th>联系人</th><th>电话</th><th>状态</th><th class="nosort">操作</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.no }}</td>
-              <td>{{ r.name }}</td>
-              <td>{{ SRC[r.source ?? ''] ?? r.source }}</td>
-              <td>{{ r.contact_name || '—' }}</td>
-              <td>{{ r.contact_phone || '—' }}</td>
-              <td><span class="badge" :class="(STATUS[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">{{ (STATUS[r.status ?? ''] ?? { text: r.status }).text }}</span></td>
-              <td class="op">
-                <a v-if="r.status === 'following'" @click="convert(r)">转客户</a>
-                <span v-else style="color: var(--text-4)">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <EmptyState
-          v-if="!loading && data.total === 0"
-          icon="target"
-          title="暂无线索"
-          desc="点击右上角「新增线索」登记，转化后自动生成客户档案"
-        />
-      </div>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-icon="target"
+        empty-title="暂无线索"
+        empty-desc="点击右上角「新增线索」登记，转化后自动生成客户档案"
+        @go="go"
+      >
+        <template #head>
+          <tr><th>编号</th><th>线索名称</th><th>来源</th><th>联系人</th><th>电话</th><th>状态</th><th class="nosort">操作</th></tr>
+        </template>
 
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.no }}</td>
+          <td>{{ r.name }}</td>
+          <td>{{ SRC[r.source ?? ''] ?? r.source }}</td>
+          <td>{{ r.contact_name || '—' }}</td>
+          <td>{{ r.contact_phone || '—' }}</td>
+          <td><span class="badge" :class="(STATUS[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">{{ (STATUS[r.status ?? ''] ?? { text: r.status }).text }}</span></td>
+          <td class="op">
+            <a v-if="r.status === 'following'" @click="convert(r)">转客户</a>
+            <span v-else style="color: var(--text-4)">—</span>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

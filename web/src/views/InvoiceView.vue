@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
 
 const SIZE = 8
@@ -103,88 +104,74 @@ onMounted(() => {
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
       <!-- 发票列表 -->
-      <div v-if="!isRecon" class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>票号</th>
-              <th>类型</th>
-              <th>购方</th>
-              <th>不含税</th>
-              <th>税额</th>
-              <th>价税合计</th>
-              <th>开票日期</th>
-              <th>状态</th>
-              <th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.invoice_no }}</td>
-              <td>
-                <span class="badge" :class="r.type === 'sales' ? 'badge-blue' : 'badge-orange'">
-                  {{ r.type === 'sales' ? '销项' : '进项' }}
-                </span>
-              </td>
-              <td>{{ r.buyer_name }}</td>
-              <td>{{ money(r.net_amount) }}</td>
-              <td>{{ money(r.tax_amount) }}</td>
-              <td><b>{{ money(r.amount) }}</b></td>
-              <td>{{ r.issued_at }}</td>
-              <td>
-                <span class="badge" :class="r.status === 'issued' ? 'badge-green' : 'badge-gray'">
-                  {{ r.status === 'issued' ? '已开具' : r.status }}
-                </span>
-              </td>
-              <td class="op"><a @click="openAttachments(r)">附件</a></td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        v-if="!isRecon"
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-title="暂无发票记录"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>票号</th>
+            <th>类型</th>
+            <th>购方</th>
+            <th>不含税</th>
+            <th>税额</th>
+            <th>价税合计</th>
+            <th>开票日期</th>
+            <th>状态</th>
+            <th class="nosort">操作</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无发票记录</div>
-        </div>
-
-        <div class="pager">
-          <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-          <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-          <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-        </div>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.invoice_no }}</td>
+          <td>
+            <span class="badge" :class="r.type === 'sales' ? 'badge-blue' : 'badge-orange'">
+              {{ r.type === 'sales' ? '销项' : '进项' }}
+            </span>
+          </td>
+          <td>{{ r.buyer_name }}</td>
+          <td>{{ money(r.net_amount) }}</td>
+          <td>{{ money(r.tax_amount) }}</td>
+          <td><b>{{ money(r.amount) }}</b></td>
+          <td>{{ r.issued_at }}</td>
+          <td>
+            <span class="badge" :class="r.status === 'issued' ? 'badge-green' : 'badge-gray'">
+              {{ r.status === 'issued' ? '已开具' : r.status }}
+            </span>
+          </td>
+          <td class="op"><a @click="openAttachments(r)">附件</a></td>
+        </tr>
+      </TableShell>
 
       <!-- 对账 -->
-      <div v-else class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>{{ tab === 'reconP' ? '供应商' : '客户' }}</th>
-              <th>订单额</th>
-              <th>{{ tab === 'reconP' ? '入库额' : '出库额' }}</th>
-              <th>{{ tab === 'reconP' ? '应付' : '应收' }}</th>
-              <th>{{ tab === 'reconP' ? '已付' : '已收' }}</th>
-              <th>余额</th>
-              <th v-if="tab === 'reconS'">授信额度</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in recon" :key="i">
-              <td>{{ tab === 'reconP' ? r.supplier_name : r.customer_name }}</td>
-              <td>{{ money(r.order_amount) }}</td>
-              <td>{{ money(tab === 'reconP' ? r.inbound_amount : r.outbound_amount) }}</td>
-              <td>{{ money(tab === 'reconP' ? r.ap_amount : r.ar_amount) }}</td>
-              <td>{{ money(tab === 'reconP' ? r.paid_amount : r.received_amount) }}</td>
-              <td><b>{{ money(tab === 'reconP' ? r.ap_remain : r.ar_remain) }}</b></td>
-              <td v-if="tab === 'reconS'">{{ money(r.credit_limit) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell v-else :rows="recon" :loading="loading" empty-title="暂无对账数据">
+        <template #head>
+          <tr>
+            <th>{{ tab === 'reconP' ? '供应商' : '客户' }}</th>
+            <th>订单额</th>
+            <th>{{ tab === 'reconP' ? '入库额' : '出库额' }}</th>
+            <th>{{ tab === 'reconP' ? '应付' : '应收' }}</th>
+            <th>{{ tab === 'reconP' ? '已付' : '已收' }}</th>
+            <th>余额</th>
+            <th v-if="tab === 'reconS'">授信额度</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && recon.length === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无对账数据</div>
-        </div>
-      </div>
+        <tr v-for="(r, i) in recon" :key="i">
+          <td>{{ tab === 'reconP' ? r.supplier_name : r.customer_name }}</td>
+          <td>{{ money(r.order_amount) }}</td>
+          <td>{{ money(tab === 'reconP' ? r.inbound_amount : r.outbound_amount) }}</td>
+          <td>{{ money(tab === 'reconP' ? r.ap_amount : r.ar_amount) }}</td>
+          <td>{{ money(tab === 'reconP' ? r.paid_amount : r.received_amount) }}</td>
+          <td><b>{{ money(tab === 'reconP' ? r.ap_remain : r.ar_remain) }}</b></td>
+          <td v-if="tab === 'reconS'">{{ money(r.credit_limit) }}</td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

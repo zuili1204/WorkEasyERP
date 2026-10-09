@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const SIZE = 8
@@ -102,48 +103,41 @@ onMounted(load)
 
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>单号</th>
-              <th>{{ isIn ? '供应商' : '客户' }}</th>
-              <th>仓库</th>
-              <th>数量</th>
-              <th>价税合计</th>
-              <th>状态</th>
-              <th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ isIn ? r.inbound_no : r.outbound_no }}</td>
-              <td>{{ isIn ? r.supplier_name : r.customer_name }}</td>
-              <td>{{ r.warehouse_name }}</td>
-              <td>{{ Number(r.total_qty ?? 0).toFixed(3) }}</td>
-              <td>{{ money(r.total_amount) }}</td>
-              <td>
-                <span class="badge" :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span>
-              </td>
-              <td class="op">
-                <a v-if="r.status === 'draft'" style="color: var(--accent)" @click="audit(r)">审核</a>
-                <span v-else style="color: var(--text-4)">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-title="`暂无${title}单`"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>单号</th>
+            <th>{{ isIn ? '供应商' : '客户' }}</th>
+            <th>仓库</th>
+            <th>数量</th>
+            <th>价税合计</th>
+            <th>状态</th>
+            <th class="nosort">操作</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无{{ title }}单</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ isIn ? r.inbound_no : r.outbound_no }}</td>
+          <td>{{ isIn ? r.supplier_name : r.customer_name }}</td>
+          <td>{{ r.warehouse_name }}</td>
+          <td>{{ Number(r.total_qty ?? 0).toFixed(3) }}</td>
+          <td>{{ money(r.total_amount) }}</td>
+          <td>
+            <span class="badge" :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span>
+          </td>
+          <td class="op">
+            <a v-if="r.status === 'draft'" style="color: var(--accent)" @click="audit(r)">审核</a>
+            <span v-else style="color: var(--text-4)">—</span>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

@@ -4,6 +4,7 @@ import { api, type PageResult } from '../api'
 import { auth } from '../stores/auth'
 import { toast } from '../stores/toast'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 
 const SIZE = 8
 const state = reactive({ q: '', status: '', scope: 'all', page: 1 })
@@ -100,42 +101,37 @@ onMounted(async () => {
 
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>单号</th><th>申请人</th><th>部门</th><th>类别</th>
-              <th>金额</th><th>发生日期</th><th>事由</th><th>状态</th><th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.no }}</td>
-              <td>{{ r.employee_name }}</td>
-              <td>{{ r.dept_name }}</td>
-              <td>{{ CATS.find((c) => c[0] === r.category)?.[1] ?? r.category }}</td>
-              <td><b>{{ money(r.amount) }}</b></td>
-              <td>{{ r.happen_date }}</td>
-              <td>{{ r.reason || '—' }}</td>
-              <td><span class="badge" :class="(STATUS[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">{{ (STATUS[r.status ?? ''] ?? { text: r.status }).text }}</span></td>
-              <td class="op">
-                <a v-if="r.status === 'draft' || r.status === 'rejected'" @click="act(String(r.id), 'submit')">提交审批</a>
-                <a v-else-if="r.status === 'approved'" @click="act(String(r.id), 'pay')">标记付款</a>
-                <span v-else style="color: var(--text-4)">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" /><div>暂无报销记录</div>
-        </div>
-      </div>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-title="暂无报销记录"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>单号</th><th>申请人</th><th>部门</th><th>类别</th>
+            <th>金额</th><th>发生日期</th><th>事由</th><th>状态</th><th class="nosort">操作</th>
+          </tr>
+        </template>
 
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.no }}</td>
+          <td>{{ r.employee_name }}</td>
+          <td>{{ r.dept_name }}</td>
+          <td>{{ CATS.find((c) => c[0] === r.category)?.[1] ?? r.category }}</td>
+          <td><b>{{ money(r.amount) }}</b></td>
+          <td>{{ r.happen_date }}</td>
+          <td>{{ r.reason || '—' }}</td>
+          <td><span class="badge" :class="(STATUS[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">{{ (STATUS[r.status ?? ''] ?? { text: r.status }).text }}</span></td>
+          <td class="op">
+            <a v-if="r.status === 'draft' || r.status === 'rejected'" @click="act(String(r.id), 'submit')">提交审批</a>
+            <a v-else-if="r.status === 'approved'" @click="act(String(r.id), 'pay')">标记付款</a>
+            <span v-else style="color: var(--text-4)">—</span>
+          </td>
+        </tr>
+      </TableShell>
       <p class="tip">流程：发起 → 主管审批 → 财务审批 → 标记付款</p>
     </div>
   </div>

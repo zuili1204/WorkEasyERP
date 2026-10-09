@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult, type TodoRow } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 
 const SIZE = 8
 
@@ -100,49 +101,42 @@ onMounted(load)
             <span class="count">共 {{ data.total }} 条</span>
           </div>
 
-          <div class="table-wrap">
-            <table class="list">
-              <thead>
-                <tr>
-                  <th>事项</th>
-                  <th>当前节点</th>
-                  <th>状态</th>
-                  <th>时间</th>
-                  <th class="nosort">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in data.list" :key="r.id">
-                  <td>{{ r.title }}</td>
-                  <td>{{ r.nodeName || '—' }}</td>
-                  <td>
-                    <span class="badge" :class="(STATUS_MAP[r.status] ?? { cls: 'badge-gray' }).cls">
-                      {{ (STATUS_MAP[r.status] ?? { text: r.status }).text }}
-                    </span>
-                  </td>
-                  <td>{{ (r.createdAt || '').replace('T', ' ').slice(0, 16) }}</td>
-                  <td class="op">
-                    <template v-if="r.actionable">
-                      <a style="color: var(--accent)" @click="openDialog(r, 'approve')">通过</a>
-                      <a style="color: var(--danger)" @click="openDialog(r, 'reject')">驳回</a>
-                    </template>
-                    <span v-else style="color: var(--text-4)">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <TableShell
+            :rows="data.list"
+            :loading="loading"
+            :page="data.page"
+            :pages="totalPages"
+            empty-title="该视图下暂无数据"
+            @go="go"
+          >
+            <template #head>
+              <tr>
+                <th>事项</th>
+                <th>当前节点</th>
+                <th>状态</th>
+                <th>时间</th>
+                <th class="nosort">操作</th>
+              </tr>
+            </template>
 
-            <div v-if="!loading && data.total === 0" class="empty">
-              <Icon name="inbox" :size="46" />
-              <div>该视图下暂无数据</div>
-            </div>
-          </div>
-
-          <div class="pager">
-            <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-            <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-            <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-          </div>
+            <tr v-for="r in data.list" :key="r.id">
+              <td>{{ r.title }}</td>
+              <td>{{ r.nodeName || '—' }}</td>
+              <td>
+                <span class="badge" :class="(STATUS_MAP[r.status] ?? { cls: 'badge-gray' }).cls">
+                  {{ (STATUS_MAP[r.status] ?? { text: r.status }).text }}
+                </span>
+              </td>
+              <td>{{ (r.createdAt || '').replace('T', ' ').slice(0, 16) }}</td>
+              <td class="op">
+                <template v-if="r.actionable">
+                  <a style="color: var(--accent)" @click="openDialog(r, 'approve')">通过</a>
+                  <a style="color: var(--danger)" @click="openDialog(r, 'reject')">驳回</a>
+                </template>
+                <span v-else style="color: var(--text-4)">—</span>
+              </td>
+            </tr>
+          </TableShell>
         </div>
       </div>
     </div>

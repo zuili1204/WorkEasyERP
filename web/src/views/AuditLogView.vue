@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 
 const SIZE = 10
 
@@ -61,41 +62,35 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>操作人</th>
-              <th>模块</th>
-              <th>动作</th>
-              <th>对象表</th>
-              <th>记录 ID</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ time(r.created_at) }}</td>
-              <td>{{ r.user_name || '—' }}</td>
-              <td><span class="badge badge-blue">{{ r.module }}</span></td>
-              <td>{{ r.action }}</td>
-              <td>{{ r.target_table || '—' }}</td>
-              <td class="mono">{{ (r.target_id || '').slice(0, 8) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-icon="state.q ? 'search' : 'inbox'"
+        :empty-title="state.q ? `未找到与「${state.q}」匹配的日志` : '暂无操作日志'"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>时间</th>
+            <th>操作人</th>
+            <th>模块</th>
+            <th>动作</th>
+            <th>对象表</th>
+            <th>记录 ID</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
-          <div>{{ state.q ? `未找到与「${state.q}」匹配的日志` : '暂无操作日志' }}</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ time(r.created_at) }}</td>
+          <td>{{ r.user_name || '—' }}</td>
+          <td><span class="badge badge-blue">{{ r.module }}</span></td>
+          <td>{{ r.action }}</td>
+          <td>{{ r.target_table || '—' }}</td>
+          <td class="mono">{{ (r.target_id || '').slice(0, 8) }}</td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 </template>

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { auth } from '../stores/auth'
 import { toast } from '../stores/toast'
 
@@ -101,80 +102,68 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <!-- 库存现量 -->
-      <div v-if="tab === 'stock'" class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>商品</th>
-              <th>仓库</th>
-              <th>现量</th>
-              <th>可用</th>
-              <th v-if="!auth.hidden('avg_cost')">加权成本</th>
-              <th v-if="!auth.hidden('last_cost')">最近成本</th>
-              <th v-if="!auth.hidden('stock_amount')">库存金额</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.sku }}</td>
-              <td>{{ r.product_name }}</td>
-              <td>{{ r.warehouse_name }}</td>
-              <td>{{ num(r.qty, 3) }} {{ r.unit || '' }}</td>
-              <td>{{ num(r.available_qty, 3) }}</td>
-              <td v-if="!auth.hidden('avg_cost')">{{ num(r.avg_cost, 4) }}</td>
-              <td v-if="!auth.hidden('last_cost')">{{ num(r.last_cost, 4) }}</td>
-              <td v-if="!auth.hidden('stock_amount')"><b>{{ num(r.stock_amount) }}</b></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-title="tab === 'stock' ? '暂无库存，请先做入库' : '暂无出入库流水'"
+        @go="go"
+      >
+        <template #head>
+          <!-- 库存现量 -->
+          <tr v-if="tab === 'stock'">
+            <th>SKU</th>
+            <th>商品</th>
+            <th>仓库</th>
+            <th>现量</th>
+            <th>可用</th>
+            <th v-if="!auth.hidden('avg_cost')">加权成本</th>
+            <th v-if="!auth.hidden('last_cost')">最近成本</th>
+            <th v-if="!auth.hidden('stock_amount')">库存金额</th>
+          </tr>
+          <!-- 出入库流水 -->
+          <tr v-else>
+            <th>流水号</th>
+            <th>类型</th>
+            <th>商品</th>
+            <th>数量</th>
+            <th>单价</th>
+            <th>金额</th>
+            <th>结存</th>
+            <th>时间</th>
+          </tr>
+        </template>
 
-      <!-- 出入库流水 -->
-      <div v-else class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>流水号</th>
-              <th>类型</th>
-              <th>商品</th>
-              <th>数量</th>
-              <th>单价</th>
-              <th>金额</th>
-              <th>结存</th>
-              <th>时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.txn_no }}</td>
-              <td>
-                <span class="badge" :class="txnBadge(r.txn_type).cls">{{ txnBadge(r.txn_type).text }}</span>
-              </td>
-              <td>{{ r.product_name }}</td>
-              <td :style="Number(r.qty) < 0 ? 'color: var(--danger)' : 'color: var(--accent)'">
-                {{ num(r.qty, 3) }}
-              </td>
-              <td>{{ num(r.price, 4) }}</td>
-              <td>{{ num(r.amount) }}</td>
-              <td>{{ num(r.balance_qty, 3) }}</td>
-              <td>{{ (r.created_at || '').replace('T', ' ').slice(0, 16) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div v-if="!loading && data.total === 0" class="empty">
-        <Icon name="inbox" :size="46" />
-        <div>{{ tab === 'stock' ? '暂无库存，请先做入库' : '暂无出入库流水' }}</div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <template v-if="tab === 'stock'">
+          <tr v-for="(r, i) in data.list" :key="i">
+            <td>{{ r.sku }}</td>
+            <td>{{ r.product_name }}</td>
+            <td>{{ r.warehouse_name }}</td>
+            <td>{{ num(r.qty, 3) }} {{ r.unit || '' }}</td>
+            <td>{{ num(r.available_qty, 3) }}</td>
+            <td v-if="!auth.hidden('avg_cost')">{{ num(r.avg_cost, 4) }}</td>
+            <td v-if="!auth.hidden('last_cost')">{{ num(r.last_cost, 4) }}</td>
+            <td v-if="!auth.hidden('stock_amount')"><b>{{ num(r.stock_amount) }}</b></td>
+          </tr>
+        </template>
+        <template v-else>
+          <tr v-for="(r, i) in data.list" :key="i">
+            <td>{{ r.txn_no }}</td>
+            <td>
+              <span class="badge" :class="txnBadge(r.txn_type).cls">{{ txnBadge(r.txn_type).text }}</span>
+            </td>
+            <td>{{ r.product_name }}</td>
+            <td :style="Number(r.qty) < 0 ? 'color: var(--danger)' : 'color: var(--accent)'">
+              {{ num(r.qty, 3) }}
+            </td>
+            <td>{{ num(r.price, 4) }}</td>
+            <td>{{ num(r.amount) }}</td>
+            <td>{{ num(r.balance_qty, 3) }}</td>
+            <td>{{ (r.created_at || '').replace('T', ' ').slice(0, 16) }}</td>
+          </tr>
+        </template>
+      </TableShell>
     </div>
   </div>
 

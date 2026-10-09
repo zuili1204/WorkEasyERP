@@ -5,8 +5,8 @@ import { api, type EmployeeRow, type PageResult } from '../api'
 import { auth } from '../stores/auth'
 import Icon from '../components/Icon.vue'
 import AppModal from '../components/AppModal.vue'
-import AppPager from '../components/AppPager.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const router = useRouter()
@@ -141,49 +141,47 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th class="sortable" :class="{ on: state.sort.startsWith('employeeNo') }" @click="toggleSort('employeeNo')">
-                工号<span class="sico"><Icon :name="sortIcon('employeeNo')" :size="12" /></span>
-              </th>
-              <th class="sortable" :class="{ on: state.sort.startsWith('realName') }" @click="toggleSort('realName')">
-                姓名<span class="sico"><Icon :name="sortIcon('realName')" :size="12" /></span>
-              </th>
-              <th>部门</th>
-              <th>岗位</th>
-              <th class="sortable" :class="{ on: state.sort.startsWith('status') }" @click="toggleSort('status')">
-                状态<span class="sico"><Icon :name="sortIcon('status')" :size="12" /></span>
-              </th>
-              <th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in data.list" :key="r.id">
-              <td>{{ r.employeeNo }}</td>
-              <td>{{ r.realName }}</td>
-              <td>{{ r.deptName || '—' }}</td>
-              <td>{{ r.position || '—' }}</td>
-              <td><StatusBadge :status="r.status" /></td>
-              <td class="op"><a @click="openDetail(r)">查看详情</a></td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-icon="state.q ? 'search' : 'inbox'"
+        :empty-title="state.q ? `未找到与「${state.q}」匹配的数据` : '当前数据范围内暂无数据'"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th class="sortable" :class="{ on: state.sort.startsWith('employeeNo') }" @click="toggleSort('employeeNo')">
+              工号<span class="sico"><Icon :name="sortIcon('employeeNo')" :size="12" /></span>
+            </th>
+            <th class="sortable" :class="{ on: state.sort.startsWith('realName') }" @click="toggleSort('realName')">
+              姓名<span class="sico"><Icon :name="sortIcon('realName')" :size="12" /></span>
+            </th>
+            <th>部门</th>
+            <th>岗位</th>
+            <th class="sortable" :class="{ on: state.sort.startsWith('status') }" @click="toggleSort('status')">
+              状态<span class="sico"><Icon :name="sortIcon('status')" :size="12" /></span>
+            </th>
+            <th class="nosort">操作</th>
+          </tr>
+        </template>
 
-        <div v-if="loading" class="empty sm"><Icon name="inbox" :size="30" /> 加载中…</div>
-        <div v-else-if="data.total === 0" class="empty">
-          <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
-          <div>
-            {{ state.q ? `未找到与「${state.q}」匹配的数据` : '当前数据范围内暂无数据' }}
-          </div>
-          <button v-if="state.q" class="btn btn-sm" style="margin-top: 14px" @click="clearSearch">
+        <tr v-for="r in data.list" :key="r.id">
+          <td>{{ r.employeeNo }}</td>
+          <td>{{ r.realName }}</td>
+          <td>{{ r.deptName || '—' }}</td>
+          <td>{{ r.position || '—' }}</td>
+          <td><StatusBadge :status="r.status" /></td>
+          <td class="op"><a @click="openDetail(r)">查看详情</a></td>
+        </tr>
+
+        <template #empty>
+          <button v-if="state.q" class="btn btn-sm" @click="clearSearch">
             <Icon name="x" :size="14" /> 清空搜索
           </button>
-        </div>
-      </div>
-
-      <AppPager :page="data.page" :pages="totalPages" @go="go" />
+        </template>
+      </TableShell>
     </div>
   </div>
 

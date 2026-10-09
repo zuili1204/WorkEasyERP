@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const SIZE = 8
@@ -75,45 +76,38 @@ onMounted(load)
 
         <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
-        <div class="table-wrap">
-          <table class="list">
-            <thead>
-              <tr>
-                <th>批次号</th>
-                <th>商品</th>
-                <th>仓库</th>
-                <th>库位</th>
-                <th>数量</th>
-                <th>成本</th>
-                <th>入库日</th>
-                <th>到期日</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(r, i) in data.list" :key="i">
-                <td>{{ r.batch_no }}</td>
-                <td>{{ r.sku }} · {{ r.product_name }}</td>
-                <td>{{ r.warehouse_name }}</td>
-                <td>{{ r.location_code || '—' }}</td>
-                <td>{{ r.qty }}</td>
-                <td>{{ r.cost_price }}</td>
-                <td>{{ r.inbound_date }}</td>
-                <td>{{ r.expire_date || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <TableShell
+          :rows="data.list"
+          :loading="loading"
+          :page="data.page"
+          :pages="totalPages"
+          empty-title="暂无批次记录"
+          @go="go"
+        >
+          <template #head>
+            <tr>
+              <th>批次号</th>
+              <th>商品</th>
+              <th>仓库</th>
+              <th>库位</th>
+              <th>数量</th>
+              <th>成本</th>
+              <th>入库日</th>
+              <th>到期日</th>
+            </tr>
+          </template>
 
-          <div v-if="!loading && data.total === 0" class="empty">
-            <Icon name="inbox" :size="46" />
-            <div>暂无批次记录</div>
-          </div>
-        </div>
-
-        <div class="pager">
-          <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-          <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-          <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-        </div>
+          <tr v-for="(r, i) in data.list" :key="i">
+            <td>{{ r.batch_no }}</td>
+            <td>{{ r.sku }} · {{ r.product_name }}</td>
+            <td>{{ r.warehouse_name }}</td>
+            <td>{{ r.location_code || '—' }}</td>
+            <td>{{ r.qty }}</td>
+            <td>{{ r.cost_price }}</td>
+            <td>{{ r.inbound_date }}</td>
+            <td>{{ r.expire_date || '—' }}</td>
+          </tr>
+        </TableShell>
       </div>
     </div>
 

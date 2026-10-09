@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
 import PromptDialog from '../components/PromptDialog.vue'
-import EmptyState from '../components/EmptyState.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const SIZE = 8
@@ -127,40 +127,39 @@ onMounted(load)
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
       <p v-if="notice" class="ok">{{ notice }}</p>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr><th>编号</th><th>商机</th><th>客户</th><th>阶段</th><th>预计金额</th><th>预计成交</th><th>状态</th><th class="nosort">操作</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.no }}</td>
-              <td>{{ r.name }}</td>
-              <td>{{ r.customer_name || '—' }}</td>
-              <td>{{ STAGES.find((s) => s[0] === r.stage)?.[1] ?? r.stage }}</td>
-              <td><b>{{ money(r.amount) }}</b></td>
-              <td>{{ r.expect_close_date || '—' }}</td>
-              <td><span class="badge" :class="(STATUS[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">{{ (STATUS[r.status ?? ''] ?? { text: r.status }).text }}</span></td>
-              <td class="op">
-                <template v-if="r.status === 'open'">
-                  <a @click="advance(r, 'negotiation')">推进谈判</a>
-                  <a @click="advance(r, 'won')">赢单</a>
-                  <a style="color: var(--danger)" @click="advance(r, 'lost')">输单</a>
-                </template>
-                <a v-else-if="r.status === 'won'" @click="toContract(r)">转合同</a>
-                <span v-else style="color: var(--text-4)">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <EmptyState v-if="!loading && data.total === 0" icon="target" title="暂无商机" desc="点击右上角「新增商机」开始记录客户跟进" />
-      </div>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-icon="target"
+        empty-title="暂无商机"
+        empty-desc="点击右上角「新增商机」开始记录客户跟进"
+        @go="go"
+      >
+        <template #head>
+          <tr><th>编号</th><th>商机</th><th>客户</th><th>阶段</th><th>预计金额</th><th>预计成交</th><th>状态</th><th class="nosort">操作</th></tr>
+        </template>
 
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.no }}</td>
+          <td>{{ r.name }}</td>
+          <td>{{ r.customer_name || '—' }}</td>
+          <td>{{ STAGES.find((s) => s[0] === r.stage)?.[1] ?? r.stage }}</td>
+          <td><b>{{ money(r.amount) }}</b></td>
+          <td>{{ r.expect_close_date || '—' }}</td>
+          <td><span class="badge" :class="(STATUS[r.status ?? ''] ?? { cls: 'badge-gray' }).cls">{{ (STATUS[r.status ?? ''] ?? { text: r.status }).text }}</span></td>
+          <td class="op">
+            <template v-if="r.status === 'open'">
+              <a @click="advance(r, 'negotiation')">推进谈判</a>
+              <a @click="advance(r, 'won')">赢单</a>
+              <a style="color: var(--danger)" @click="advance(r, 'lost')">输单</a>
+            </template>
+            <a v-else-if="r.status === 'won'" @click="toContract(r)">转合同</a>
+            <span v-else style="color: var(--text-4)">—</span>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

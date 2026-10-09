@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { toast } from '../stores/toast'
 
 const currencies = ref<Record<string, string | null>[]>([])
@@ -29,6 +30,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function go(p: number) {
+  page.value = p
+  load()
 }
 
 async function removeRate(id: string) {
@@ -147,40 +153,34 @@ onMounted(load)
           <span class="count">共 {{ rates.total }} 条</span>
         </div>
 
-        <div class="table-wrap">
-          <table class="list">
-            <thead>
-              <tr>
-                <th>源币种</th>
-                <th>目标币种</th>
-                <th>汇率</th>
-                <th>生效日</th>
-                <th>来源</th>
-                <th class="nosort">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(r, i) in rates.list" :key="i">
-                <td>{{ r.currency_from }} · {{ r.currency_name }}</td>
-                <td>{{ r.currency_to }}</td>
-                <td><b>{{ r.rate }}</b></td>
-                <td>{{ r.rate_date }}</td>
-                <td>{{ r.source }}</td>
-                <td class="op"><a class="danger" @click="removeRate(String(r.id))">删除</a></td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-if="!loading && rates.total === 0" class="empty">
-            <Icon name="inbox" :size="46" />
-            <div>暂无汇率记录</div>
-          </div>
-        </div>
+        <TableShell
+          :rows="rates.list"
+          :loading="loading"
+          :page="rates.page"
+          :pages="totalPages"
+          empty-title="暂无汇率记录"
+          @go="go"
+        >
+          <template #head>
+            <tr>
+              <th>源币种</th>
+              <th>目标币种</th>
+              <th>汇率</th>
+              <th>生效日</th>
+              <th>来源</th>
+              <th class="nosort">操作</th>
+            </tr>
+          </template>
 
-        <div class="pager">
-          <span class="pbtn" :class="{ dis: page <= 1 }" @click="page--; load()">‹ 上一页</span>
-          <span>第 {{ rates.page }} / {{ totalPages }} 页</span>
-          <span class="pbtn" :class="{ dis: page >= totalPages }" @click="page++; load()">下一页 ›</span>
-        </div>
+          <tr v-for="(r, i) in rates.list" :key="i">
+            <td>{{ r.currency_from }} · {{ r.currency_name }}</td>
+            <td>{{ r.currency_to }}</td>
+            <td><b>{{ r.rate }}</b></td>
+            <td>{{ r.rate_date }}</td>
+            <td>{{ r.source }}</td>
+            <td class="op"><a class="danger" @click="removeRate(String(r.id))">删除</a></td>
+          </tr>
+        </TableShell>
 
         <div class="conv">
           <b>换算试算</b>

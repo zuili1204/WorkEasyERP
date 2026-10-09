@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 import { auth } from '../stores/auth'
 import { toast } from '../stores/toast'
 
@@ -63,55 +64,48 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>期间</th>
-              <th>员工</th>
-              <th v-if="!auth.hidden('net_pay')">基本工资</th>
-              <th v-if="!auth.hidden('net_pay')">奖金</th>
-              <th v-if="!auth.hidden('net_pay')">津贴</th>
-              <th v-if="!auth.hidden('net_pay')">扣款</th>
-              <th v-if="!auth.hidden('net_pay')">社保</th>
-              <th v-if="!auth.hidden('net_pay')">个税</th>
-              <th v-if="!auth.hidden('net_pay')">实发</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.period }}</td>
-              <td>{{ r.employee_name }}</td>
-              <template v-if="!auth.hidden('net_pay')">
-                <td>{{ money(r.base_salary) }}</td>
-                <td>{{ money(r.bonus) }}</td>
-                <td>{{ money(r.allowance) }}</td>
-                <td>{{ money(r.deduction) }}</td>
-                <td>{{ money(r.social_security) }}</td>
-                <td>{{ money(r.tax) }}</td>
-                <td><b>{{ money(r.net_pay) }}</b></td>
-              </template>
-              <td>
-                <span class="badge" :class="r.status === 'paid' ? 'badge-green' : 'badge-gray'">
-                  {{ r.status === 'paid' ? '已发放' : '草稿' }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-title="暂无薪资记录"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>期间</th>
+            <th>员工</th>
+            <th v-if="!auth.hidden('net_pay')">基本工资</th>
+            <th v-if="!auth.hidden('net_pay')">奖金</th>
+            <th v-if="!auth.hidden('net_pay')">津贴</th>
+            <th v-if="!auth.hidden('net_pay')">扣款</th>
+            <th v-if="!auth.hidden('net_pay')">社保</th>
+            <th v-if="!auth.hidden('net_pay')">个税</th>
+            <th v-if="!auth.hidden('net_pay')">实发</th>
+            <th>状态</th>
+          </tr>
+        </template>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无薪资记录</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <tr v-for="(r, i) in data.list" :key="i">
+          <td>{{ r.period }}</td>
+          <td>{{ r.employee_name }}</td>
+          <template v-if="!auth.hidden('net_pay')">
+            <td>{{ money(r.base_salary) }}</td>
+            <td>{{ money(r.bonus) }}</td>
+            <td>{{ money(r.allowance) }}</td>
+            <td>{{ money(r.deduction) }}</td>
+            <td>{{ money(r.social_security) }}</td>
+            <td>{{ money(r.tax) }}</td>
+            <td><b>{{ money(r.net_pay) }}</b></td>
+          </template>
+          <td>
+            <span class="badge" :class="r.status === 'paid' ? 'badge-green' : 'badge-gray'">
+              {{ r.status === 'paid' ? '已发放' : '草稿' }}
+            </span>
+          </td>
+        </tr>
+      </TableShell>
     </div>
   </div>
 

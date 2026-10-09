@@ -6,6 +6,8 @@
  * 一份数据（#26 / #28），后续若与 router meta 联动也只需改这一处。
  */
 
+import { findEntity } from './entityForms'
+
 export interface MenuItem {
   id: string
   label: string
@@ -127,6 +129,9 @@ export const MENU: MenuGroup[] = [
 export const EXTRA_TITLE: Record<string, string> = {
   '/print': '单据打印',
   '/system/workflow-cfg': '审批流程配置',
+  // 新建页不在菜单中，需兜底，否则面包屑会回退成「工作台」
+  '/leaves/new': '发起请假',
+  '/employees/new': '新建员工',
 }
 
 /** 扁平菜单项 */
@@ -142,10 +147,27 @@ export function visibleMenu(roles: string[]): MenuGroup[] {
   })).filter((g) => g.items.length > 0)
 }
 
-/** 当前路由标题：菜单命中 → EXTRA_TITLE 前缀兜底 → 工作台 */
+/**
+ * 当前路由标题：菜单命中 → EXTRA_TITLE 前缀兜底 → 工作台
+ *
+ * #27 复核结论（2026-10-09）：多态路由 `oa/:bizType`、`attendance/:kind`、`hr/:kind`
+ * 解析出的 route.path（/oa/overtime、/attendance/punch、/hr/entry …）与 MENU 中的
+ * path 字面完全一致，精确匹配即可命中 → 面包屑与侧边栏高亮**实际均正常**。
+ * 因此**决定不再拆分为真实子路由**（拆分收益低于预期），
+ * 仅在未来需要按 kind 单独配置 meta（如独立权限/标题）时再拆。
+ * 注：`attendance/duty-calendar` 是独立字面路由且定义在 `:kind` 之前，不会被参数路由误匹配。
+ */
 export function titleOf(path: string): string {
   const hit = flatMenu().find((i) => i.path === path)?.label
   if (hit) return hit
+
+  // 统一新建页 /new/:base/:variant? → 直接用注册表里的标题（已含动作词，如「新建采购订单」「发起报销」）
+  if (path.startsWith('/new/')) {
+    const [base, variant] = path.slice('/new/'.length).split('/').filter(Boolean)
+    const key = variant ? `${base}:${variant}` : (base ?? '')
+    return (key && findEntity(key)?.title) || '新建单据'
+  }
+
   const extra = Object.keys(EXTRA_TITLE).find((p) => path.startsWith(p))
   return extra ? EXTRA_TITLE[extra] : '工作台'
 }

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import TableShell from '../components/TableShell.vue'
 
 const SIZE = 8
 const TABS = [
@@ -97,72 +98,62 @@ onMounted(load)
 
       <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
-      <div class="table-wrap">
-        <!-- 台账 -->
-        <table v-if="tab !== 'pay'" class="list">
-          <thead>
-            <tr>
-              <th>单号</th>
-              <th>往来单位</th>
-              <th>发生额</th>
-              <th>已核销</th>
-              <th>余额</th>
-              <th>到期日</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.biz_no }}</td>
-              <td>{{ r.party_name }}</td>
-              <td>{{ money(r.amount) }}</td>
-              <td>{{ money(r.settled_amount) }}</td>
-              <td><b>{{ money(r.remain_amount) }}</b></td>
-              <td>{{ r.due_date || '—' }}</td>
-              <td><span class="badge" :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span></td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        empty-title="暂无记录"
+        @go="go"
+      >
+        <template #head>
+          <!-- 台账 -->
+          <tr v-if="tab !== 'pay'">
+            <th>单号</th>
+            <th>往来单位</th>
+            <th>发生额</th>
+            <th>已核销</th>
+            <th>余额</th>
+            <th>到期日</th>
+            <th>状态</th>
+          </tr>
+          <!-- 收付款记录 -->
+          <tr v-else>
+            <th>单号</th>
+            <th>类型</th>
+            <th>往来单位</th>
+            <th>金额</th>
+            <th>方式</th>
+            <th>日期</th>
+          </tr>
+        </template>
 
-        <!-- 收付款记录 -->
-        <table v-else class="list">
-          <thead>
-            <tr>
-              <th>单号</th>
-              <th>类型</th>
-              <th>往来单位</th>
-              <th>金额</th>
-              <th>方式</th>
-              <th>日期</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in data.list" :key="i">
-              <td>{{ r.payment_no }}</td>
-              <td>
-                <span class="badge" :class="r.type === 'receive' ? 'badge-green' : 'badge-orange'">
-                  {{ r.type === 'receive' ? '收款' : '付款' }}
-                </span>
-              </td>
-              <td>{{ r.counterparty_name }}</td>
-              <td>{{ money(r.amount) }}</td>
-              <td>{{ r.pay_method }}</td>
-              <td>{{ r.pay_date }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>暂无记录</div>
-        </div>
-      </div>
-
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+        <template v-if="tab !== 'pay'">
+          <tr v-for="(r, i) in data.list" :key="i">
+            <td>{{ r.biz_no }}</td>
+            <td>{{ r.party_name }}</td>
+            <td>{{ money(r.amount) }}</td>
+            <td>{{ money(r.settled_amount) }}</td>
+            <td><b>{{ money(r.remain_amount) }}</b></td>
+            <td>{{ r.due_date || '—' }}</td>
+            <td><span class="badge" :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span></td>
+          </tr>
+        </template>
+        <template v-else>
+          <tr v-for="(r, i) in data.list" :key="i">
+            <td>{{ r.payment_no }}</td>
+            <td>
+              <span class="badge" :class="r.type === 'receive' ? 'badge-green' : 'badge-orange'">
+                {{ r.type === 'receive' ? '收款' : '付款' }}
+              </span>
+            </td>
+            <td>{{ r.counterparty_name }}</td>
+            <td>{{ money(r.amount) }}</td>
+            <td>{{ r.pay_method }}</td>
+            <td>{{ r.pay_date }}</td>
+          </tr>
+        </template>
+      </TableShell>
     </div>
   </div>
 

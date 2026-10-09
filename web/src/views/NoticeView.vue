@@ -2,6 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type NoticeRow, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import AppPager from '../components/AppPager.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LoadingState from '../components/LoadingState.vue'
 
 const SIZE = 8
 
@@ -58,6 +61,7 @@ onMounted(load)
           <Icon name="filter" :size="14" /> 仅看未读
         </button>
         <button class="btn btn-sm btn-ghost" @click="readAll"><Icon name="check" :size="14" /> 全部已读</button>
+        <span class="count">共 {{ data.total }} 条</span>
       </div>
     </div>
 
@@ -83,17 +87,14 @@ onMounted(load)
           </div>
         </div>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon name="inbox" :size="46" />
-          <div>{{ state.onlyUnread ? '没有未读消息' : '暂无消息' }}</div>
-        </div>
+        <LoadingState v-if="loading" />
+        <EmptyState
+          v-else-if="data.total === 0"
+          :title="state.onlyUnread ? '没有未读消息' : '暂无消息'"
+        />
       </div>
 
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页 · 共 {{ data.total }} 条</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+      <AppPager :page="data.page" :pages="totalPages" @go="go" />
     </div>
   </div>
 </template>

@@ -5,7 +5,7 @@ import { api, type LeaveRow, type PageResult } from '../api'
 import { toast } from '../stores/toast'
 import Icon from '../components/Icon.vue'
 import AppModal from '../components/AppModal.vue'
-import AppPager from '../components/AppPager.vue'
+import TableShell from '../components/TableShell.vue'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
 import { LEAVE_TYPES, WORKFLOW_STATUS, labelOf, statusOf } from '../utils/dict'
 import { fmtDateTime } from '../utils/format'
@@ -114,50 +114,50 @@ onMounted(load)
         <span class="count">共 {{ data.total }} 条</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="list">
-          <thead>
-            <tr>
-              <th>单号</th>
-              <th>申请人</th>
-              <th>类型</th>
-              <th class="nosort">起止时间</th>
-              <th>天数</th>
-              <th>状态</th>
-              <th class="nosort">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in data.list" :key="r.id">
-              <td>{{ r.orderNo }}</td>
-              <td>{{ r.employeeName }}</td>
-              <td>{{ labelOf(LEAVE_TYPES, r.leaveType) }}</td>
-              <td>{{ fmtDateTime(r.startAt) }} ~ {{ fmtDateTime(r.endAt) }}</td>
-              <td>{{ r.duration }}</td>
-              <td>
-                <span class="badge" :class="statusOf(WORKFLOW_STATUS, r.status).cls">
-                  {{ statusOf(WORKFLOW_STATUS, r.status).text }}
-                </span>
-              </td>
-              <td class="op">
-                <a @click="openAttachments(r)">附件</a>
-                <a v-if="r.status === 'rejected' || r.status === 'canceled'" @click="goResubmit(r)">重新提交</a>
-                <a v-if="r.status === 'pending'" style="color: var(--danger)" @click="cancel(r)">撤销</a>
-                <span v-if="r.status === 'approved'" style="color: var(--text-4)">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <TableShell
+        :rows="data.list"
+        :loading="loading"
+        :page="data.page"
+        :pages="totalPages"
+        :empty-icon="state.q ? 'search' : 'inbox'"
+        :empty-title="state.q ? `未找到与「${state.q}」匹配的数据` : '暂无请假记录'"
+        @go="go"
+      >
+        <template #head>
+          <tr>
+            <th>单号</th>
+            <th>申请人</th>
+            <th>类型</th>
+            <th class="nosort">起止时间</th>
+            <th>天数</th>
+            <th>状态</th>
+            <th class="nosort">操作</th>
+          </tr>
+        </template>
 
-        <div v-if="loading" class="empty sm"><Icon name="inbox" :size="30" /> 加载中…</div>
-        <div v-else-if="data.total === 0" class="empty">
-          <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
-          <div>{{ state.q ? `未找到与「${state.q}」匹配的数据` : '暂无请假记录' }}</div>
+        <tr v-for="r in data.list" :key="r.id">
+          <td>{{ r.orderNo }}</td>
+          <td>{{ r.employeeName }}</td>
+          <td>{{ labelOf(LEAVE_TYPES, r.leaveType) }}</td>
+          <td>{{ fmtDateTime(r.startAt) }} ~ {{ fmtDateTime(r.endAt) }}</td>
+          <td>{{ r.duration }}</td>
+          <td>
+            <span class="badge" :class="statusOf(WORKFLOW_STATUS, r.status).cls">
+              {{ statusOf(WORKFLOW_STATUS, r.status).text }}
+            </span>
+          </td>
+          <td class="op">
+            <a @click="openAttachments(r)">附件</a>
+            <a v-if="r.status === 'rejected' || r.status === 'canceled'" @click="goResubmit(r)">重新提交</a>
+            <a v-if="r.status === 'pending'" style="color: var(--danger)" @click="cancel(r)">撤销</a>
+            <span v-if="r.status === 'approved'" style="color: var(--text-4)">—</span>
+          </td>
+        </tr>
+
+        <template #empty>
           <button class="btn btn-primary btn-sm" @click="goCreate">发起请假</button>
-        </div>
-      </div>
-
-      <AppPager :page="data.page" :pages="totalPages" @go="go" />
+        </template>
+      </TableShell>
     </div>
   </div>
 
