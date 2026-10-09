@@ -19,6 +19,25 @@
 
 ---
 
+## 🖼️ 界面预览
+
+> 以下截图取自真实运行环境（演示种子数据）。
+
+![工作台](screenshots/we-dashboard.png)
+
+**工作台** · 经营概览卡片、近 6 月营收毛利趋势、应收 Top5
+
+| | |
+|---|---|
+| ![登录页](screenshots/we-login.png) | ![可视化流程设计器](screenshots/we-workflow-designer.png) |
+| **登录页** · 角色卡片一键体验 | **可视化流程设计器** · 节点库 / 流程画布 / 节点属性 |
+| ![员工档案](screenshots/we-employees.png) | ![排班日历](screenshots/we-duty-calendar.png) |
+| **员工档案** · 数据范围按角色切换 | **排班 / 值班日历** · 月度视图与人员值班 |
+| ![多币种汇率](screenshots/we-fx.png) | ![角色与权限](screenshots/we-role-perm.png) |
+| **多币种汇率** · 币种卡片与汇率维护 | **角色与权限** · 按角色勾选授权 |
+
+---
+
 ## 🧱 技术栈
 
 | 层 | 技术 |
@@ -42,6 +61,7 @@ WorkEasyERP/
 │       └── styles/      # 设计令牌 tokens.css
 ├── server/              # 后端：Kotlin + Spring Boot（Gradle 包装器已自带）
 │   └── src/main/resources/db/migration/   # Flyway 迁移 V1–V23（含种子数据）
+├── screenshots/    # README 界面预览截图
 ├── docker-compose.yml   # PostgreSQL 15 一键起库
 └── README.md
 ```
@@ -80,7 +100,7 @@ npm run dev
 - 浏览器访问：<http://127.0.0.1:5180>
 
 ### 演示数据
-首次启动由服务端自动初始化演示组织、角色与账号（详见 `server` 端初始化逻辑）。**演示口令为开发默认值，生产环境请立即修改。**
+首次启动由服务端自动初始化演示组织、部门、员工与账号（见 `server` 端 `DataInitializer`，仅在用户表为空时执行）。**演示口令为开发默认值，生产环境请立即修改。**
 
 ### 生产构建
 ```bash
