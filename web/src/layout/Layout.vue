@@ -4,116 +4,75 @@ import { useRoute, useRouter } from 'vue-router'
 import { auth } from '../stores/auth'
 import { api } from '../api'
 import Icon from '../components/Icon.vue'
+import { searchMenu, titleOf, visibleMenu as visibleMenuOf, type MenuItem } from '../utils/menu'
 
 const router = useRouter()
 const route = useRoute()
 
-/** 菜单：roles 为空表示所有角色可见（与原型 MENU 一致，M0 仅放开已实现页面） */
-const MENU = [
-  {
-    group: '通用',
-    items: [
-      { id: 'dashboard', label: '工作台', icon: 'dashboard', path: '/', roles: [] as string[] },
-      { id: 'todos', label: '待办中心', icon: 'check-square', path: '/todos', roles: [] as string[] },
-      { id: 'notices', label: '消息中心', icon: 'bell', path: '/notices', roles: [] as string[] },
-    ],
-  },
-  {
-    group: 'OA 办公',
-    items: [
-      { id: 'departments', label: '部门管理', icon: 'building', path: '/departments', roles: ['boss', 'manager', 'hr'] },
-      { id: 'employees', label: '员工档案', icon: 'user', path: '/employees', roles: ['boss', 'manager', 'hr'] },
-      { id: 'leaves', label: '请假申请', icon: 'calendar', path: '/leaves', roles: [] as string[] },
-      { id: 'overtime', label: '加班', icon: 'clock', path: '/oa/overtime', roles: [] as string[] },
-      { id: 'appeal', label: '补卡申诉', icon: 'edit', path: '/oa/appeal', roles: [] as string[] },
-      { id: 'outing', label: '外出', icon: 'map-pin', path: '/oa/outing', roles: [] as string[] },
-      { id: 'trip', label: '出差', icon: 'plane', path: '/oa/trip', roles: [] as string[] },
-    ],
-  },
-  {
-    group: '组织人事',
-    items: [
-      { id: 'hr_entry', label: '入职办理', icon: 'user-plus', path: '/hr/entry', roles: ['boss', 'manager', 'hr'] },
-      { id: 'hr_regular', label: '转正', icon: 'award', path: '/hr/regular', roles: ['boss', 'manager', 'hr'] },
-      { id: 'hr_transfer', label: '调岗', icon: 'refresh', path: '/hr/transfer', roles: ['boss', 'manager', 'hr'] },
-      { id: 'hr_promo', label: '晋升', icon: 'arrow-up', path: '/hr/promo', roles: ['boss', 'manager', 'hr'] },
-      { id: 'hr_dimission', label: '离职/辞退', icon: 'user-minus', path: '/hr/dimission', roles: ['boss', 'manager', 'hr'] },
-      { id: 'hr_contract', label: '劳动合同', icon: 'file-text', path: '/hr/contract', roles: ['boss', 'manager', 'hr'] },
-      { id: 'payroll', label: '薪资核算', icon: 'wallet', path: '/payroll', roles: ['boss', 'finance', 'hr'] },
-    ],
-  },
-  {
-    group: '考勤管理',
-    items: [
-      { id: 'att_punch', label: '打卡记录', icon: 'map-pin', path: '/attendance/punch', roles: [] as string[] },
-      { id: 'att_daily', label: '日考勤结果', icon: 'calendar', path: '/attendance/daily', roles: [] as string[] },
-      { id: 'att_shift', label: '班次定义', icon: 'clock', path: '/attendance/shift', roles: ['boss', 'manager', 'hr'] },
-      { id: 'att_schedule', label: '排班', icon: 'calendar', path: '/attendance/schedule', roles: ['boss', 'manager', 'hr'] },
-    ],
-  },
-  {
-    group: 'CRM 客户',
-    items: [
-      { id: 'lead', label: '线索管理', icon: 'target', path: '/crm/leads', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'customer', label: '客户管理', icon: 'building', path: '/customers', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'opportunity', label: '商机管理', icon: 'trending-up', path: '/crm/opportunities', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'contract', label: '合同管理', icon: 'file-text', path: '/crm/contracts', roles: ['boss', 'manager', 'finance', 'sales'] },
-    ],
-  },
-  {
-    group: '库存',
-    items: [
-      { id: 'inventory', label: '库存管理', icon: 'package', path: '/inventory', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'stocktake', label: '库存盘点', icon: 'check-square', path: '/inventory/stocktake', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'batch', label: '批次/库位', icon: 'box', path: '/inventory/batches', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'returns', label: '退货管理', icon: 'rotate-ccw', path: '/returns', roles: ['boss', 'manager', 'finance', 'sales'] },
-    ],
-  },
-  {
-    group: '采购',
-    items: [
-      { id: 'purchase_req', label: '采购申请', icon: 'edit', path: '/purchase/requests', roles: ['boss', 'manager', 'finance', 'purchase'] },
-      { id: 'purchase_order', label: '采购订单', icon: 'shopping-cart', path: '/orders/purchase', roles: ['boss', 'manager', 'finance', 'purchase'] },
-      { id: 'purchase_inbound', label: '采购入库', icon: 'package', path: '/purchase/inbounds', roles: ['boss', 'manager', 'finance', 'purchase'] },
-    ],
-  },
-  {
-    group: '销售',
-    items: [
-      { id: 'sales_order', label: '销售订单', icon: 'briefcase', path: '/orders/sales', roles: ['boss', 'manager', 'finance', 'sales'] },
-      { id: 'sales_outbound', label: '销售出库', icon: 'truck', path: '/sales/outbounds', roles: ['boss', 'manager', 'finance', 'sales'] },
-    ],
-  },
-  {
-    group: '财务',
-    items: [
-      { id: 'finance', label: '应收应付', icon: 'wallet', path: '/finance', roles: ['boss', 'manager', 'finance'] },
-      { id: 'invoices', label: '发票与对账', icon: 'receipt', path: '/finance/invoices', roles: ['boss', 'manager', 'finance'] },
-      { id: 'expense', label: '报销', icon: 'receipt', path: '/expenses', roles: [] as string[] },
-    ],
-  },
-  {
-    group: '报表与分析',
-    icon: 'bar-chart',
-    items: [
-      { id: 'report', label: '自定义报表', icon: 'bar-chart', path: '/reports', roles: ['boss', 'manager', 'finance'] },
-    ],
-  },
-  {
-    group: '系统管理',
-    items: [
-      { id: 'role_perm', label: '角色与权限', icon: 'shield', path: '/system/role-perm', roles: ['boss', 'manager', 'finance'] },
-      { id: 'workflow_cfg', label: '审批流程配置', icon: 'git-branch', path: '/system/workflow-designer', roles: ['boss', 'manager', 'finance'] },
-      { id: 'fx', label: '多币种汇率', icon: 'dollar-sign', path: '/system/fx', roles: ['boss', 'manager', 'finance'] },
-      { id: 'basedata', label: '基础数据', icon: 'box', path: '/basedata', roles: ['boss', 'manager', 'finance', 'hr'] },
-      { id: 'audit_log', label: '操作日志', icon: 'list', path: '/system/audit-logs', roles: ['boss', 'manager', 'finance'] },
-    ],
-  },
-]
+// 菜单已抽取到 utils/menu.ts（侧边栏渲染与顶栏搜索共用同一份数据）
 
 const menuOpen = ref(false)
 const searchRef = ref<HTMLInputElement | null>(null)
 const unread = ref(0)
+
+/* ---- 顶栏全局搜索（#28）：原先是无任何绑定的装饰性死控件 ---- */
+const searchText = ref('')
+const searchIndex = ref(0)
+const searchHits = computed<MenuItem[]>(() => searchMenu(searchText.value, auth.user?.roles ?? []))
+const searchOpen = computed(() => searchText.value.trim().length > 0)
+
+function onSearchInput() {
+  searchIndex.value = 0
+}
+
+function goSearch(hit?: MenuItem) {
+  const target = hit ?? searchHits.value[searchIndex.value]
+  if (!target) return
+  router.push(target.path)
+  searchText.value = ''
+}
+
+function moveSearch(step: number) {
+  const n = searchHits.value.length
+  if (!n) return
+  searchIndex.value = (searchIndex.value + step + n) % n
+}
+
+function closeSearch() {
+  searchText.value = ''
+}
+
+/* ---- 侧边栏：分组折叠(#1) + 整栏折叠(#2)，状态持久化到 localStorage ---- */
+const GROUPS_KEY = 'we-sidebar-groups'
+const MINI_KEY = 'we-sidebar-mini'
+const AUTO_MINI_WIDTH = 1100
+
+/** 手动折叠的分组名 */
+const collapsedGroups = ref<string[]>(JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]'))
+/** 用户手动「收起侧边栏」的偏好 */
+const miniPref = ref(localStorage.getItem(MINI_KEY) === '1')
+/** 窄屏自动折叠：不写偏好，避免污染用户手动选择 */
+const autoMini = ref(false)
+
+const sidebarMini = computed(() => miniPref.value || autoMini.value)
+
+function isGroupCollapsed(group: string) {
+  // 整栏收起时图标已是纯图标模式，分组折叠无意义，保持展开
+  return !sidebarMini.value && collapsedGroups.value.includes(group)
+}
+function toggleGroup(group: string) {
+  const i = collapsedGroups.value.indexOf(group)
+  if (i >= 0) collapsedGroups.value.splice(i, 1)
+  else collapsedGroups.value.push(group)
+  localStorage.setItem(GROUPS_KEY, JSON.stringify(collapsedGroups.value))
+}
+function toggleSidebar() {
+  miniPref.value = !miniPref.value
+  localStorage.setItem(MINI_KEY, miniPref.value ? '1' : '0')
+}
+function syncAutoMini() {
+  autoMini.value = window.innerWidth <= AUTO_MINI_WIDTH
+}
 
 async function loadUnread() {
   try {
@@ -123,17 +82,9 @@ async function loadUnread() {
   }
 }
 
-const visibleMenu = computed(() =>
-  MENU.map((g) => ({
-    ...g,
-    items: g.items.filter((i) => i.roles.length === 0 || i.roles.some((r) => auth.user?.roles.includes(r))),
-  })).filter((g) => g.items.length > 0),
-)
+const visibleMenu = computed(() => visibleMenuOf(auth.user?.roles ?? []))
 
-const currentTitle = computed(() => {
-  const all = MENU.flatMap((g) => g.items)
-  return all.find((i) => i.path === route.path)?.label ?? '工作台'
-})
+const currentTitle = computed(() => titleOf(route.path))
 
 function logout() {
   auth.clear()
@@ -141,39 +92,76 @@ function logout() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') menuOpen.value = false
+  if (e.key === 'Escape') {
+    menuOpen.value = false
+    closeSearch()
+  }
   if (e.key === '/' && (e.target as HTMLElement)?.tagName !== 'INPUT') {
     e.preventDefault()
     searchRef.value?.focus()
   }
 }
 
+/** 未读角标轮询：原先仅在路由变化时刷新，停留在同一页时新消息不会体现 */
+let unreadTimer: number | undefined
+
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  window.addEventListener('resize', syncAutoMini)
+  syncAutoMini()
   loadUnread()
+  unreadTimer = window.setInterval(loadUnread, 60_000)
 })
 // 路由切换后刷新未读数（审批/提交会产生新消息）
 watch(() => route.fullPath, () => loadUnread())
-onUnmounted(() => window.removeEventListener('keydown', onKey))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('resize', syncAutoMini)
+  if (unreadTimer) window.clearInterval(unreadTimer)
+})
 </script>
 
 <template>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ mini: sidebarMini }">
       <div class="side-logo">
         <div class="logo">W</div>
-        <span>WorkEasyERP</span>
+        <span v-if="!sidebarMini">WorkEasyERP</span>
+        <button
+          class="logo-toggle"
+          :title="sidebarMini ? '展开侧边栏' : '收起侧边栏'"
+          :aria-label="sidebarMini ? '展开侧边栏' : '收起侧边栏'"
+          @click="toggleSidebar"
+        >
+          <Icon :name="sidebarMini ? 'chevron-right' : 'chevron-left'" :size="16" />
+        </button>
       </div>
 
       <nav class="side-nav">
         <template v-for="g in visibleMenu" :key="g.group">
-          <div class="nav-group-title">{{ g.group }}</div>
+          <button
+            class="nav-group-title"
+            :title="sidebarMini ? g.group : undefined"
+            :aria-expanded="!isGroupCollapsed(g.group)"
+            @click="toggleGroup(g.group)"
+          >
+            <span class="gt-txt">{{ g.group }}</span>
+            <Icon
+              v-if="!sidebarMini"
+              class="gt-chevron"
+              :class="{ collapsed: isGroupCollapsed(g.group) }"
+              name="chevron-down"
+              :size="13"
+            />
+          </button>
           <router-link
             v-for="i in g.items"
+            v-show="!isGroupCollapsed(g.group)"
             :key="i.id"
             :to="i.path"
             class="nav-item"
             active-class="active"
+            :title="i.label"
           >
             <Icon :name="i.icon" :size="18" />
             <span class="nav-txt">{{ i.label }}</span>
@@ -200,7 +188,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
         <div class="search">
           <Icon name="search" :size="16" />
-          <input ref="searchRef" placeholder="搜索单据 / 客户 / 员工…" />
+          <input
+            ref="searchRef"
+            v-model="searchText"
+            placeholder="搜索菜单 / 功能…（/ 聚焦，↑↓ 选择，回车跳转）"
+            @input="onSearchInput"
+            @keydown.enter.prevent="goSearch()"
+            @keydown.down.prevent="moveSearch(1)"
+            @keydown.up.prevent="moveSearch(-1)"
+            @keydown.esc.prevent="closeSearch"
+          />
+          <div v-if="searchOpen" class="search-pop">
+            <div v-if="searchHits.length === 0" class="search-empty">无匹配项</div>
+            <div
+              v-for="(h, i) in searchHits"
+              :key="h.id"
+              class="search-item"
+              :class="{ on: i === searchIndex }"
+              @mousedown.prevent="goSearch(h)"
+            >
+              <Icon :name="h.icon" :size="14" />
+              <span class="lb">{{ h.label }}</span>
+              <span class="path">{{ h.path }}</span>
+            </div>
+          </div>
         </div>
 
         <div class="top-actions">
@@ -239,12 +250,24 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 <style scoped>
 .app { display: flex; height: 100vh; }
-.sidebar { width: 232px; background: var(--sidebar); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar {
+  width: 232px; background: var(--sidebar); display: flex; flex-direction: column; flex-shrink: 0;
+  transition: width .2s var(--ease);
+}
+.sidebar.mini { width: 64px; }
 .side-logo {
-  height: 60px; display: flex; align-items: center; gap: 11px; padding: 0 18px;
+  height: 60px; display: flex; align-items: center; gap: 11px; padding: 0 14px;
   border-bottom: 1px solid rgba(255, 255, 255, .06);
   background: linear-gradient(180deg, rgba(79, 70, 229, .10), transparent);
 }
+.logo-toggle {
+  margin-left: auto; width: 24px; height: 24px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, .08); border: 0; border-radius: 7px;
+  color: var(--sidebar-text); cursor: pointer; transition: .16s var(--ease);
+}
+.logo-toggle:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+.sidebar.mini .logo-toggle { margin-left: 0; }
 .logo {
   width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, #6366F1, #4F46E5);
   color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800;
@@ -252,9 +275,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .side-logo span { font-weight: 800; font-size: 15px; color: #fff; letter-spacing: .3px; }
 .side-nav { flex: 1; overflow-y: auto; padding: 10px 0; }
 .nav-group-title {
-  padding: 14px 18px 6px; font-size: 10.5px; color: var(--sidebar-weak);
+  width: 100%; padding: 14px 18px 6px; font-size: 10.5px; color: var(--sidebar-weak);
   font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  background: none; border: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  transition: color .16s var(--ease);
 }
+.nav-group-title:hover { color: #fff; }
+.gt-chevron { flex-shrink: 0; transition: transform .2s var(--ease-out); }
+.gt-chevron.collapsed { transform: rotate(-90deg); }
 .nav-item {
   position: relative; margin: 2px 10px; padding: 9px 12px; border-radius: 9px;
   font-size: 13px; color: var(--sidebar-text);
@@ -285,7 +314,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .topbar {
   height: 60px; background: var(--surface); border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 22px; gap: 14px; flex-shrink: 0; position: relative;
-  box-shadow: var(--shadow-xs); z-index: 5;
+  box-shadow: var(--shadow-xs); z-index: var(--z-topbar);
 }
 .crumb { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-3); white-space: nowrap; }
 .crumb .root { display: inline-flex; align-items: center; gap: 5px; }
@@ -298,6 +327,20 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .search input:focus { background: #fff; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); outline: none; }
 .search svg { position: absolute; left: 12px; top: 9px; color: var(--text-3); }
+/* 搜索结果浮层 */
+.search-pop {
+  position: absolute; top: 38px; left: 0; right: 0; z-index: var(--z-dropdown);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg); padding: 5px; max-height: 320px; overflow: auto;
+}
+.search-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text-2);
+}
+.search-item:hover, .search-item.on { background: var(--primary-light); color: var(--primary-active); }
+.search-item .lb { font-weight: 600; }
+.search-item .path { margin-left: auto; font-size: 11px; color: var(--text-4); font-family: monospace; }
+.search-empty { padding: 12px 10px; font-size: 12.5px; color: var(--text-3); text-align: center; }
 .top-actions { display: flex; align-items: center; gap: 6px; }
 .top-actions .ic { color: var(--text-2); cursor: pointer; border-radius: 9px; padding: 7px; display: flex; }
 .top-actions .ic:hover { background: var(--slate-light); color: var(--primary); }
@@ -314,7 +357,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .user-menu {
   position: absolute; top: 54px; right: 22px; width: 230px; background: #fff;
   border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg);
-  padding: 6px; z-index: 120;
+  padding: 6px; z-index: var(--z-dropdown);
 }
 .um-head { padding: 12px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--border-2); margin-bottom: 6px; }
 .um-head .ava {
@@ -332,9 +375,27 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 .content { flex: 1; overflow-y: auto; padding: 22px 24px; }
 
+/* ---- 收起态：手动 mini 与窄屏 autoMini 均由 .mini 类驱动，避免两套逻辑分叉 ---- */
+.sidebar.mini .nav-item .nav-txt,
+.sidebar.mini .side-user .nm,
+.sidebar.mini .side-user .rl,
+.sidebar.mini .side-logo span { display: none; }
+.sidebar.mini .nav-item { justify-content: center; padding: 11px 0; }
+.sidebar.mini .side-user { justify-content: center; }
+/* 收起态下分组标题降级为一条细分隔线，保持分组语义又不占空间 */
+.sidebar.mini .nav-group-title { justify-content: center; padding: 7px 0; pointer-events: none; }
+.sidebar.mini .nav-group-title .gt-txt { display: none; }
+.sidebar.mini .nav-group-title::before {
+  content: ''; width: 22px; height: 1px; background: rgba(255, 255, 255, .14);
+}
+
+/* 无 JS 首帧兜底：窄屏直接收窄，避免闪现宽侧栏 */
 @media (max-width: 1100px) {
-  .sidebar { width: 64px; }
-  .nav-item .nav-txt, .nav-group-title, .side-user .nm, .side-user .rl, .side-logo span { display: none; }
-  .nav-item { justify-content: center; padding: 11px 0; }
+  .sidebar:not(.mini) { width: 64px; }
+  .sidebar:not(.mini) .nav-item .nav-txt,
+  .sidebar:not(.mini) .side-user .nm,
+  .sidebar:not(.mini) .side-user .rl,
+  .sidebar:not(.mini) .side-logo span { display: none; }
+  .sidebar:not(.mini) .nav-item { justify-content: center; padding: 11px 0; }
 }
 </style>

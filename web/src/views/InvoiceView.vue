@@ -18,8 +18,8 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const recon = ref<Record<string, string | null>[]>([])
 const loading = ref(false)
 
-const showModal = ref(false)
 const showAtt = ref(false)
+// 登记发票已迁移至独立页 /new/invoice/sales｜purchase（见 utils/entityForms.ts）
 const attId = ref('')
 const attNo = ref('')
 
@@ -28,13 +28,10 @@ function openAttachments(r: Record<string, string | null>) {
   attNo.value = String(r.invoice_no ?? '')
   showAtt.value = true
 }
-const form = reactive({ type: 'sales', partyName: '', partyTaxNo: '', amount: 0, taxRate: 0.13 })
-const saving = ref(false)
 const errorMsg = ref('')
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 const isRecon = computed(() => tab.value === 'reconP' || tab.value === 'reconS')
-const netPreview = computed(() => Number(form.amount || 0) / (1 + Number(form.taxRate || 0)))
 
 async function load() {
   loading.value = true
@@ -51,38 +48,6 @@ async function load() {
   }
 }
 
-function openModal() {
-  errorMsg.value = ''
-  form.type = tab.value === 'purchase' ? 'purchase' : 'sales'
-  form.partyName = ''
-  form.partyTaxNo = ''
-  form.amount = 0
-  showModal.value = true
-}
-
-async function submit() {
-  if (!form.partyName.trim() || form.amount <= 0) return
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createInvoice({
-      type: form.type,
-      partyName: form.partyName.trim(),
-      partyTaxNo: form.partyTaxNo || undefined,
-      amount: Number(form.amount),
-      taxRate: Number(form.taxRate),
-    })
-    showModal.value = false
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
-
 function go(p: number) {
   if (p < 1 || p > totalPages.value) return
   state.page = p
@@ -95,10 +60,7 @@ function money(v: string | null | undefined) {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    showModal.value = false
-    showAtt.value = false
-  }
+  if (e.key === 'Escape') showAtt.value = false
 }
 
 watch(tab, () => {
@@ -117,9 +79,9 @@ onMounted(() => {
   <div class="card">
     <div class="card-head">
       <h3><Icon name="receipt" :size="17" /> 发票与对账</h3>
-      <button v-if="!isRecon" class="btn btn-primary btn-sm" @click="openModal">
+      <router-link v-if="!isRecon" class="btn btn-primary btn-sm" :to="tab === 'purchase' ? '/new/invoice/purchase' : '/new/invoice/sales'">
         <Icon name="plus" :size="14" /> 登记发票
-      </button>
+      </router-link>
     </div>
 
     <div class="card-body">
@@ -242,49 +204,9 @@ onMounted(() => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="receipt" :size="18" /> 登记{{ form.type === 'sales' ? '销项' : '进项' }}发票</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>购方名称 *</label>
-            <input v-model="form.partyName" class="input" />
-          </div>
-          <div class="field">
-            <label>购方税号</label>
-            <input v-model="form.partyTaxNo" class="input" />
-          </div>
-          <div class="field">
-            <label>价税合计 *</label>
-            <input v-model.number="form.amount" type="number" min="0" class="input" />
-          </div>
-          <div class="field">
-            <label>税率</label>
-            <input v-model.number="form.taxRate" type="number" step="0.01" class="input" />
-          </div>
-        </div>
-        <p class="tip">不含税 {{ netPreview.toFixed(2) }}，税额 {{ (Number(form.amount || 0) - netPreview).toFixed(2) }}（由价税合计与税率反算）</p>
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">
-          <Icon name="check" :size="15" /> 保存
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.tip { font-size: 12px; color: var(--text-3); margin: 8px 0 0; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px; margin: 10px 0 0; }
 .mask {
   position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);

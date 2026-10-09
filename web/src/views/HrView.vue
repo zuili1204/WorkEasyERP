@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 const route = useRoute()
@@ -11,17 +12,12 @@ const kind = computed(() => String(route.params.kind || 'regular'))
 
 const META: Record<
   string,
-  { title: string; icon: string; fields: Array<[string, string, string]>; cols: Array<[string, string]>; approval: boolean }
+  { title: string; icon: string; cols: Array<[string, string]>; approval: boolean }
 > = {
   regular: {
     title: '转正',
     icon: 'award',
     approval: true,
-    fields: [
-      ['probationEnd', '试用期止', 'date'],
-      ['regularDate', '转正日期', 'date'],
-      ['evaluation', '评估意见', 'textarea'],
-    ],
     cols: [
       ['employee_name', '员工'],
       ['probation_end', '试用期止'],
@@ -33,14 +29,6 @@ const META: Record<
     title: '调岗',
     icon: 'refresh',
     approval: true,
-    fields: [
-      ['fromDeptId', '原部门', 'dept'],
-      ['toDeptId', '新部门', 'dept'],
-      ['fromPosition', '原岗位', 'text'],
-      ['toPosition', '新岗位', 'text'],
-      ['effectiveDate', '生效日', 'date'],
-      ['reason', '原因', 'textarea'],
-    ],
     cols: [
       ['employee_name', '员工'],
       ['from_position', '原岗位'],
@@ -53,14 +41,6 @@ const META: Record<
     title: '晋升',
     icon: 'arrow-up',
     approval: true,
-    fields: [
-      ['fromPosition', '原职位', 'text'],
-      ['toPosition', '新职位', 'text'],
-      ['fromLevel', '原职级', 'text'],
-      ['toLevel', '新职级', 'text'],
-      ['effectiveDate', '生效日', 'date'],
-      ['reason', '原因', 'textarea'],
-    ],
     cols: [
       ['employee_name', '员工'],
       ['from_position', '原职位'],
@@ -73,12 +53,6 @@ const META: Record<
     title: '离职 / 辞退',
     icon: 'user-minus',
     approval: true,
-    fields: [
-      ['type', '类型', 'select:resign/terminate/retire'],
-      ['lastWorkDate', '最后工作日', 'date'],
-      ['handoverTo', '交接人', 'text'],
-      ['reason', '原因', 'textarea'],
-    ],
     cols: [
       ['employee_name', '员工'],
       ['type', '类型'],
@@ -90,14 +64,6 @@ const META: Record<
     title: '入职办理',
     icon: 'user-plus',
     approval: false,
-    fields: [
-      ['candidateName', '候选人 *', 'text'],
-      ['phone', '手机号', 'text'],
-      ['expectedDeptId', '期望部门', 'dept'],
-      ['expectedPosition', '期望岗位', 'text'],
-      ['expectedEntryDate', '预计入职', 'date'],
-      ['sourceChannel', '招聘渠道', 'text'],
-    ],
     cols: [
       ['apply_no', '单号'],
       ['candidate_name', '候选人'],
@@ -110,14 +76,6 @@ const META: Record<
     title: '劳动合同',
     icon: 'file-text',
     approval: false,
-    fields: [
-      ['contractNo', '合同号 *', 'text'],
-      ['type', '类型', 'select:fixed/nonfixed'],
-      ['startDate', '起始日', 'date'],
-      ['endDate', '到期日', 'date'],
-      ['signDate', '签订日', 'date'],
-      ['remark', '备注', 'textarea'],
-    ],
     cols: [
       ['contract_no', '合同号'],
       ['employee_name', '员工'],
@@ -152,10 +110,7 @@ const meta = computed(() => META[kind.value] ?? META.regular)
 const state = reactive({ q: '', scope: 'mine', page: 1 })
 const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: SIZE })
 const loading = ref(false)
-const showModal = ref(false)
-const form = reactive<Record<string, string>>({})
-const saving = ref(false)
-const depts = ref<{ id: string; name: string }[]>([])
+// 六类人事事件发起已迁移至独立页 /new/hr/<kind>（见 utils/entityForms.ts）
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
@@ -168,36 +123,15 @@ async function load() {
   }
 }
 
-async function loadDepts() {
-  const r = await api.departments({ page: 1, size: 50 })
-  depts.value = r.list.map((d) => ({ id: d.id, name: d.name }))
-}
-
-function openModal() {
-  meta.value.fields.forEach(([k]) => (form[k] = ''))
-  showModal.value = true
-}
-
-async function submit() {
-  saving.value = true
-  try {
-    const payload: Record<string, unknown> = {}
-    meta.value.fields.forEach(([k, , type]) => {
-      const v = form[k]
-      if (!v) return
-      payload[k] = v
-    })
-    await api.hrSubmit(kind.value, payload)
-    showModal.value = false
-    load()
-  } finally {
-    saving.value = false
-  }
-}
-
 async function confirm(row: Record<string, string | null>) {
-  await api.confirmEntry(String(row.id))
-  load()
+  try {
+    await api.confirmEntry(String(row.id))
+    load()
+    toast.success('已确认入职，员工档案已建立')
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { msg?: string } } }
+    toast.error(err.response?.data?.msg || '确认入职失败')
+  }
 }
 
 function go(p: number) {
@@ -213,30 +147,22 @@ function cell(row: Record<string, string | null>, key: string) {
   return String(v).replace('T', ' ').slice(0, 10)
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
 watch(kind, () => {
   state.page = 1
   state.q = ''
   load()
 })
 
-onMounted(async () => {
-  await loadDepts()
-  load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
   <div class="card">
     <div class="card-head">
       <h3><Icon :name="meta.icon" :size="17" /> {{ meta.title }}</h3>
-      <button class="btn btn-primary btn-sm" @click="openModal">
+      <router-link class="btn btn-primary btn-sm" :to="`/new/hr/${kind}`">
         <Icon name="plus" :size="14" /> {{ kind === 'entry' ? '登记候选人' : kind === 'contract' ? '新增合同' : '发起申请' }}
-      </button>
+      </router-link>
     </div>
 
     <div class="card-body">
@@ -292,53 +218,9 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon :name="meta.icon" :size="18" /> {{ meta.title }}</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div v-for="f in meta.fields" :key="f[0]" class="field">
-          <label>{{ f[1] }}</label>
-          <select v-if="f[2] === 'dept'" v-model="form[f[0]]" class="input">
-            <option v-for="d in depts" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
-          <select v-else-if="f[2].startsWith('select:')" v-model="form[f[0]]" class="input">
-            <option v-for="o in f[2].split(':')[1].split('/')" :key="o" :value="o">
-              {{ ({ resign: '主动离职', terminate: '辞退', retire: '退休', fixed: '固定期', nonfixed: '无固定期' } as Record<string, string>)[o] || o }}
-            </option>
-          </select>
-          <textarea v-else-if="f[2] === 'textarea'" v-model="form[f[0]]" rows="3" class="input"></textarea>
-          <input v-else v-model="form[f[0]]" :type="f[2]" class="input" />
-        </div>
-        <p v-if="meta.approval" class="tip">提交后将进入审批流程（主管 → HR），通过后自动更新员工档案</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">
-          <Icon name="check" :size="15" /> {{ meta.approval ? '提交审批' : '保存' }}
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
 .nosort { cursor: default; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.field textarea { resize: vertical; }
-.tip { font-size: 12px; color: var(--text-3); margin: 4px 0 0; }
-.mask {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
-  display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 80px 20px;
-}
-.modal { background: #fff; border-radius: var(--radius-lg); width: 520px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
+
 </style>

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 const state = reactive({ q: '', page: 1 })
@@ -9,21 +10,8 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const loading = ref(false)
 const expiring = ref<Record<string, string | null>[]>([])
 
-const products = ref<{ id: string; name: string; sku: string }[]>([])
-const warehouses = ref<{ id: string; name: string }[]>([])
-
-const showModal = ref(false)
-const form = reactive({
-  productId: '',
-  warehouseId: '',
-  qty: 10,
-  costPrice: 0,
-  batchNo: '',
-  locationCode: '',
-  expireDate: '',
-})
-const saving = ref(false)
 const errorMsg = ref('')
+// 登记批次已迁移至独立页 /new/batch（见 utils/entityForms.ts）
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
@@ -32,51 +20,11 @@ async function load() {
   try {
     data.value = await api.batches(state.q || undefined, state.page, SIZE)
     expiring.value = await api.expiringBatches()
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadRefs() {
-  const p = await api.baseList('product', undefined, 1, 50)
-  products.value = p.list.map((x) => ({
-    id: String(x.id), name: String(x.name ?? ''), sku: String(x.sku ?? ''),
-  }))
-  const w = await api.baseList('warehouse', undefined, 1, 50)
-  warehouses.value = w.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  if (!form.productId && products.value.length) form.productId = products.value[0].id
-  if (!form.warehouseId && warehouses.value.length) form.warehouseId = warehouses.value[0].id
-}
-
-function openModal() {
-  errorMsg.value = ''
-  form.batchNo = ''
-  form.locationCode = ''
-  form.expireDate = ''
-  showModal.value = true
-}
-
-async function submit() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createBatch({
-      productId: form.productId,
-      warehouseId: form.warehouseId,
-      qty: Number(form.qty),
-      costPrice: Number(form.costPrice),
-      batchNo: form.batchNo || undefined,
-      locationCode: form.locationCode || undefined,
-      expireDate: form.expireDate || undefined,
-    })
-    showModal.value = false
-    state.page = 1
-    await load()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
+    toast.error(err.response?.data?.msg || '批次列表加载失败')
   } finally {
-    saving.value = false
+    loading.value = false
   }
 }
 
@@ -93,15 +41,7 @@ function daysLeft(v: string | null | undefined) {
   return `${d} 天后到期`
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
-onMounted(async () => {
-  await loadRefs()
-  await load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
@@ -117,9 +57,9 @@ onMounted(async () => {
     <div class="card">
       <div class="card-head">
         <h3><Icon name="box" :size="17" /> 批次 / 库位</h3>
-        <button class="btn btn-primary btn-sm" @click="openModal">
+        <router-link class="btn btn-primary btn-sm" to="/new/batch">
           <Icon name="plus" :size="14" /> 登记批次
-        </button>
+        </router-link>
       </div>
 
       <div class="card-body">
@@ -177,57 +117,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-if="showModal" class="mask" @click.self="showModal = false">
-      <div class="modal">
-        <div class="modal-head">
-          <h3><Icon name="box" :size="18" /> 登记批次</h3>
-          <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-        </div>
-        <div class="modal-body">
-          <div class="grid">
-            <div class="field">
-              <label>商品 *</label>
-              <select v-model="form.productId" class="input">
-                <option v-for="p in products" :key="p.id" :value="p.id">{{ p.sku }} · {{ p.name }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>仓库 *</label>
-              <select v-model="form.warehouseId" class="input">
-                <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>数量 *</label>
-              <input v-model.number="form.qty" type="number" min="1" class="input" />
-            </div>
-            <div class="field">
-              <label>成本单价</label>
-              <input v-model.number="form.costPrice" type="number" min="0" class="input" />
-            </div>
-            <div class="field">
-              <label>批次号</label>
-              <input v-model="form.batchNo" class="input" placeholder="留空自动生成" />
-            </div>
-            <div class="field">
-              <label>库位编码</label>
-              <input v-model="form.locationCode" class="input" placeholder="如 A-01-03" />
-            </div>
-            <div class="field">
-              <label>到期日</label>
-              <input v-model="form.expireDate" type="date" class="input" />
-            </div>
-          </div>
-          <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn" @click="showModal = false">取消</button>
-          <button class="btn btn-primary" :disabled="saving" @click="submit">
-            <Icon name="check" :size="15" /> 保存
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -238,19 +127,5 @@ onMounted(async () => {
   border-radius: var(--radius); padding: 11px 16px; margin-bottom: 14px; font-size: 13px;
 }
 .chip { background: #fff; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px; margin: 10px 0 0; }
-.mask {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
-  display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px;
-}
-.modal { background: #fff; border-radius: var(--radius-lg); width: 620px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
 </style>

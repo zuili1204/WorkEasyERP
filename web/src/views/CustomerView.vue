@@ -2,24 +2,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import EmptyState from '../components/EmptyState.vue'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 
 const state = reactive({ q: '', scope: 'mine', level: '', page: 1 })
 const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: SIZE })
 const loading = ref(false)
-const showModal = ref(false)
-const form = reactive({
-  name: '',
-  level: 'B',
-  contactName: '',
-  contactPhone: '',
-  address: '',
-  creditLimit: 0,
-  paymentTerms: 30,
-  remark: '',
-})
-const saving = ref(false)
+// 新增客户已迁移至独立页 /new/customer（见 utils/entityForms.ts）
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
@@ -53,33 +44,6 @@ function setScope(s: string) {
   load()
 }
 
-async function submit() {
-  if (!form.name.trim()) return
-  saving.value = true
-  try {
-    await api.createCustomer({
-      name: form.name.trim(),
-      level: form.level,
-      contactName: form.contactName || undefined,
-      contactPhone: form.contactPhone || undefined,
-      address: form.address || undefined,
-      creditLimit: Number(form.creditLimit),
-      paymentTerms: Number(form.paymentTerms),
-      remark: form.remark || undefined,
-    })
-    showModal.value = false
-    form.name = ''
-    form.contactName = ''
-    form.contactPhone = ''
-    form.address = ''
-    form.remark = ''
-    state.page = 1
-    load()
-  } finally {
-    saving.value = false
-  }
-}
-
 function go(p: number) {
   if (p < 1 || p > totalPages.value) return
   state.page = p
@@ -91,28 +55,27 @@ function money(v: string | null | undefined) {
   return Number(v).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
 async function exportXlsx() {
-  const blob = await api.exportFile('customers')
-  api.saveBlob(blob, `customers-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  try {
+    const blob = await api.exportFile('customers')
+    api.saveBlob(blob, `customers-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast.success('客户 Excel 已导出')
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { msg?: string } } }
+    toast.error(err.response?.data?.msg || '导出失败')
+  }
 }
 
-onMounted(() => {
-  load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
   <div class="card">
     <div class="card-head">
       <h3><Icon name="building" :size="17" /> 客户管理</h3>
-      <button class="btn btn-primary btn-sm" @click="showModal = true">
+      <router-link class="btn btn-primary btn-sm" to="/new/customer">
         <Icon name="plus" :size="14" /> 新增客户
-      </button>
+      </router-link>
     </div>
 
     <div class="card-body">
@@ -181,12 +144,12 @@ onMounted(() => {
           </tbody>
         </table>
 
-        <div v-if="!loading && data.total === 0" class="empty">
-          <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
-          <div>
-            {{ state.q ? `未找到与「${state.q}」匹配的客户` : '当前数据范围内暂无客户' }}
-          </div>
-        </div>
+        <EmptyState
+          v-if="!loading && data.total === 0"
+          :icon="state.q ? 'search' : 'building'"
+          :title="state.q ? '未找到匹配的客户' : '暂无客户'"
+          :desc="state.q ? `没有与「${state.q}」匹配的客户，换个关键词试试` : '当前数据范围内暂无客户，点击右上角「新增客户」开始录入'"
+        />
       </div>
 
       <div class="pager">
@@ -197,78 +160,8 @@ onMounted(() => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="building" :size="18" /> 新增客户</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>客户名称 *</label>
-            <input v-model="form.name" class="input" placeholder="如：宏达贸易" />
-          </div>
-          <div class="field">
-            <label>等级</label>
-            <select v-model="form.level" class="input">
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>联系人</label>
-            <input v-model="form.contactName" class="input" />
-          </div>
-          <div class="field">
-            <label>联系电话</label>
-            <input v-model="form.contactPhone" class="input" />
-          </div>
-          <div class="field">
-            <label>授信额度</label>
-            <input v-model.number="form.creditLimit" type="number" class="input" />
-          </div>
-          <div class="field">
-            <label>账期（天）</label>
-            <input v-model.number="form.paymentTerms" type="number" class="input" />
-          </div>
-        </div>
-        <div class="field">
-          <label>地址</label>
-          <input v-model="form.address" class="input" />
-        </div>
-        <div class="field">
-          <label>备注</label>
-          <textarea v-model="form.remark" rows="2" class="input"></textarea>
-        </div>
-        <p class="tip">归属销售默认为当前登录员工，部门随之自动带入</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">
-          <Icon name="check" :size="15" /> 保存
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.field textarea { resize: vertical; }
-.tip { font-size: 12px; color: var(--text-3); margin: 0; }
-.mask {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
-  display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 80px 20px;
-}
-.modal { background: #fff; border-radius: var(--radius-lg); width: 560px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
+
 </style>

@@ -4,7 +4,8 @@ import { useRouter } from 'vue-router'
 import { api, type DashboardOverview } from '../api'
 import { auth } from '../stores/auth'
 import Icon from '../components/Icon.vue'
-import LoadingState from '../components/LoadingState.vue'
+import { WORKFLOW_STATUS, statusOf } from '../utils/dict'
+import { fmtCompact, fmtDateTime } from '../utils/format'
 
 const router = useRouter()
 const data = ref<DashboardOverview | null>(null)
@@ -35,12 +36,7 @@ const SCOPE_TEXT: Record<string, string> = {
   self: '本人数据',
 }
 
-const STATUS_MAP: Record<string, { text: string; cls: string }> = {
-  running: { text: '审批中', cls: 'badge-orange' },
-  approved: { text: '已通过', cls: 'badge-green' },
-  rejected: { text: '已驳回', cls: 'badge-red' },
-  canceled: { text: '已撤销', cls: 'badge-gray' },
-}
+// 审批状态统一取自 utils/dict
 
 const ALERT_ICON: Record<string, string> = {
   stock: 'package',
@@ -48,11 +44,17 @@ const ALERT_ICON: Record<string, string> = {
   overdue: 'alert-triangle',
 }
 
-/** 柱状图高度：以最大值为基准归一化 */
-const maxSales = computed(() => Math.max(1, ...(data.value?.trend ?? []).map((t) => t.salesRaw)))
+/** 坐标轴上限：取整到「整十/整百」量级，使 Y 轴刻度可读（原来直接用原始最大值，没有刻度） */
+const axisTop = computed(() => {
+  const raw = Math.max(1, ...(data.value?.trend ?? []).map((t) => Math.max(t.salesRaw, t.profitRaw)))
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)))
+  return Math.max(1, Math.ceil(raw / mag) * mag)
+})
+/** Y 轴刻度：由高到低 [上限, 1/2, 0] */
+const axisTicks = computed(() => [axisTop.value, axisTop.value / 2, 0])
 
 function barHeight(v: number) {
-  return Math.max(4, Math.round((v / maxSales.value) * 100))
+  return Math.max(4, Math.round((v / axisTop.value) * 100))
 }
 
 onMounted(async () => {
@@ -97,9 +99,8 @@ onMounted(async () => {
       </template>
     </div>
 
-    <LoadingState v-if="loading" text="加载工作台数据…" />
-
-    <template v-else>
+    <!-- 加载态由上方统计卡骨架屏承担，此处不再叠加 LoadingState（原先两者会同时出现） -->
+    <template v-if="!loading">
     <div class="grid2">
       <!-- 营收 / 毛利趋势 -->
       <div class="card">
@@ -112,14 +113,25 @@ onMounted(async () => {
             <Icon name="inbox" :size="34" />
             <div>暂无订单数据</div>
           </div>
-          <div v-else class="chart">
-            <div v-for="t in data?.trend ?? []" :key="t.month" class="col">
-              <div class="bars">
-                <div class="bar sales" :style="{ height: barHeight(t.salesRaw) + '%' }" :title="`营收 ${t.sales}`"></div>
-                <div class="bar profit" :style="{ height: barHeight(t.profitRaw) + '%' }" :title="`毛利 ${t.profit}`"></div>
+          <div v-else class="chart-wrap">
+            <div class="y-axis">
+              <span v-for="tick in axisTicks" :key="tick">{{ fmtCompact(tick) }}</span>
+            </div>
+            <div class="plot">
+              <div
+                v-for="(tick, i) in axisTicks"
+                :key="'line' + i"
+                class="grid-line"
+                :style="{ top: (i / (axisTicks.length - 1)) * 100 + '%' }"
+              ></div>
+              <div v-for="t in data?.trend ?? []" :key="t.month" class="col">
+                <div class="bars">
+                  <div class="bar sales" :style="{ height: barHeight(t.salesRaw) + '%' }" :title="`营收 ${t.sales}`"></div>
+                  <div class="bar profit" :style="{ height: barHeight(t.profitRaw) + '%' }" :title="`毛利 ${t.profit}`"></div>
+                </div>
+                <div class="m">{{ t.month.slice(2) }}</div>
+                <div class="v">{{ t.sales }}</div>
               </div>
-              <div class="m">{{ t.month.slice(2) }}</div>
-              <div class="v">{{ t.sales }}</div>
             </div>
           </div>
           <div class="legend">
@@ -194,11 +206,11 @@ onMounted(async () => {
               <td>{{ r.title }}</td>
               <td>{{ r.bizType }}</td>
               <td>
-                <span class="badge" :class="(STATUS_MAP[r.status] ?? { cls: 'badge-gray' }).cls">
-                  {{ (STATUS_MAP[r.status] ?? { text: r.status }).text }}
+                <span class="badge" :class="statusOf(WORKFLOW_STATUS, r.status).cls">
+                  {{ statusOf(WORKFLOW_STATUS, r.status).text }}
                 </span>
               </td>
-              <td>{{ (r.createdAt || '').replace('T', ' ').slice(0, 16) }}</td>
+              <td>{{ fmtDateTime(r.createdAt) }}</td>
             </tr>
           </tbody>
         </table>
@@ -242,8 +254,17 @@ onMounted(async () => {
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 16px; }
 
 /* 柱状图 */
-.chart { display: flex; align-items: flex-end; gap: 14px; height: 168px; padding: 8px 4px 0; }
-.chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.chart-wrap { display: grid; grid-template-columns: 46px 1fr; gap: 8px; padding: 8px 4px 0; }
+.y-axis {
+  height: 118px; display: flex; flex-direction: column; justify-content: space-between;
+  align-items: flex-end; font-size: 10.5px; color: var(--text-4); font-variant-numeric: tabular-nums;
+}
+.plot { position: relative; display: flex; align-items: flex-end; gap: 14px; height: 118px; }
+.grid-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-2); }
+.chart-wrap .col {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  height: 100%; position: relative; z-index: 1;
+}
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 118px; }
 .bar { width: 15px; border-radius: 3px 3px 0 0; transition: height .4s var(--ease); min-height: 4px; }
 .bar.sales { background: var(--primary); }

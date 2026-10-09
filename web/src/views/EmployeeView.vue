@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api, type EmployeeRow, type PageResult } from '../api'
 import { auth } from '../stores/auth'
 import Icon from '../components/Icon.vue'
+import AppModal from '../components/AppModal.vue'
+import AppPager from '../components/AppPager.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import { toast } from '../stores/toast'
 
+const router = useRouter()
 const PAGE_SIZE = 8
 
 /** 默认数据范围取自角色 data_scope（跨域收窄由后端 ScopeResolver 兜底） */
@@ -24,6 +29,7 @@ const SCOPES: Array<[string, string]> = [
 const state = reactive({ q: '', scope: defaultScope(), sort: '', page: 1 })
 const data = ref<PageResult<EmployeeRow>>({ list: [], total: 0, page: 1, size: PAGE_SIZE })
 const loading = ref(false)
+const detail = ref<EmployeeRow | null>(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / PAGE_SIZE)))
 
@@ -37,6 +43,9 @@ async function load() {
       size: PAGE_SIZE,
       sort: state.sort || undefined,
     })
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { msg?: string } } }
+    toast.error(err.response?.data?.msg || '员工列表加载失败')
   } finally {
     loading.value = false
   }
@@ -83,6 +92,11 @@ function clearSearch() {
   load()
 }
 
+/** 原先这里是两个无效的 <a>（点了没反应），改为「查看详情」弹窗；后端暂未提供更新接口，故不暴露编辑入口 */
+function openDetail(r: EmployeeRow) {
+  detail.value = r
+}
+
 onMounted(load)
 </script>
 
@@ -90,7 +104,12 @@ onMounted(load)
   <div class="card">
     <div class="card-head">
       <h3><Icon name="user" :size="17" /> 员工档案</h3>
-      <span class="domain-tag">数据范围由角色决定，可在下方切换</span>
+      <div class="head-actions">
+        <span class="domain-tag">数据范围由角色决定，可在下方切换</span>
+        <button class="btn btn-primary btn-sm" @click="router.push('/employees/new')">
+          <Icon name="plus" :size="14" /> 新建员工
+        </button>
+      </div>
     </div>
 
     <div class="card-body">
@@ -147,12 +166,13 @@ onMounted(load)
               <td>{{ r.deptName || '—' }}</td>
               <td>{{ r.position || '—' }}</td>
               <td><StatusBadge :status="r.status" /></td>
-              <td class="op"><a>查看</a><a>编辑</a></td>
+              <td class="op"><a @click="openDetail(r)">查看详情</a></td>
             </tr>
           </tbody>
         </table>
 
-        <div v-if="!loading && data.total === 0" class="empty">
+        <div v-if="loading" class="empty sm"><Icon name="inbox" :size="30" /> 加载中…</div>
+        <div v-else-if="data.total === 0" class="empty">
           <Icon :name="state.q ? 'search' : 'inbox'" :size="46" />
           <div>
             {{ state.q ? `未找到与「${state.q}」匹配的数据` : '当前数据范围内暂无数据' }}
@@ -163,15 +183,31 @@ onMounted(load)
         </div>
       </div>
 
-      <div class="pager">
-        <span class="pbtn" :class="{ dis: state.page <= 1 }" @click="go(state.page - 1)">‹ 上一页</span>
-        <span>第 {{ data.page }} / {{ totalPages }} 页</span>
-        <span class="pbtn" :class="{ dis: state.page >= totalPages }" @click="go(state.page + 1)">下一页 ›</span>
-      </div>
+      <AppPager :page="data.page" :pages="totalPages" @go="go" />
     </div>
   </div>
+
+  <AppModal :open="!!detail" title="员工详情" icon="user" @close="detail = null">
+    <div v-if="detail" class="detail">
+      <div class="detail-row"><span>工号</span><b>{{ detail.employeeNo || '—' }}</b></div>
+      <div class="detail-row"><span>姓名</span><b>{{ detail.realName }}</b></div>
+      <div class="detail-row"><span>部门</span><b>{{ detail.deptName || '—' }}</b></div>
+      <div class="detail-row"><span>岗位</span><b>{{ detail.position || '—' }}</b></div>
+      <div class="detail-row"><span>状态</span><b><StatusBadge :status="detail.status" /></b></div>
+    </div>
+    <template #footer>
+      <button class="btn" @click="detail = null">关闭</button>
+    </template>
+  </AppModal>
 </template>
 
 <style scoped>
 .nosort { cursor: default; }
+.head-actions { display: flex; align-items: center; gap: 10px; }
+.detail-row {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 9px 0; border-bottom: 1px solid var(--border-2); font-size: 13.5px;
+}
+.detail-row span { color: var(--text-3); }
+.detail-row:last-child { border-bottom: 0; }
 </style>

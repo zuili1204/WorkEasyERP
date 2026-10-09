@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import EmptyState from '../components/EmptyState.vue'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
 
 const SIZE = 8
@@ -10,14 +11,11 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const loading = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
-const customers = ref<{ id: string; name: string }[]>([])
-const showModal = ref(false)
 const showAtt = ref(false)
 const attId = ref('')
 const attNo = ref('')
-const form = reactive({ name: '', customerId: '', amount: 0, signDate: '', endDate: '', paymentTerms: 30 })
-const saving = ref(false)
 const errorMsg = ref('')
+// 登记合同已迁移至独立页 /new/contract（见 utils/entityForms.ts）
 
 const STATUS: Record<string, { text: string; cls: string }> = {
   draft: { text: '草稿', cls: 'badge-gray' },
@@ -33,37 +31,6 @@ async function load() {
     data.value = await api.contracts(state.q || undefined, state.status || undefined, state.scope, state.page, SIZE)
   } finally {
     loading.value = false
-  }
-}
-
-async function loadCustomers() {
-  const r = await api.customers(undefined, 'all', undefined, 1, 50)
-  customers.value = r.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  if (!form.customerId && customers.value.length) form.customerId = customers.value[0].id
-}
-
-async function submit() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createContract({
-      name: form.name.trim(),
-      customerId: form.customerId,
-      amount: Number(form.amount),
-      signDate: form.signDate || undefined,
-      endDate: form.endDate || undefined,
-      paymentTerms: Number(form.paymentTerms),
-    })
-    showModal.value = false
-    form.name = ''
-    form.amount = 0
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -90,14 +57,10 @@ function daysLeft(v: string | null) {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    showModal.value = false
-    showAtt.value = false
-  }
+  if (e.key === 'Escape') showAtt.value = false
 }
 
 onMounted(async () => {
-  await loadCustomers()
   await load()
   window.addEventListener('keydown', onKey)
 })
@@ -108,7 +71,7 @@ onMounted(async () => {
     <div class="card">
       <div class="card-head">
         <h3><Icon name="file-text" :size="17" /> 合同管理</h3>
-        <button class="btn btn-primary btn-sm" @click="showModal = true"><Icon name="plus" :size="14" /> 登记合同</button>
+        <router-link class="btn btn-primary btn-sm" to="/new/contract"><Icon name="plus" :size="14" /> 登记合同</router-link>
       </div>
 
       <div class="card-body">
@@ -155,7 +118,12 @@ onMounted(async () => {
               </tr>
             </tbody>
           </table>
-          <div v-if="!loading && data.total === 0" class="empty"><Icon name="inbox" :size="46" /><div>暂无合同</div></div>
+          <EmptyState
+            v-if="!loading && data.total === 0"
+            icon="file-text"
+            title="暂无合同"
+            desc="点击右上角「登记合同」，或由商机赢单后自动转化生成"
+          />
         </div>
 
         <div class="pager">
@@ -181,56 +149,10 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-if="showModal" class="mask" @click.self="showModal = false">
-      <div class="modal">
-        <div class="modal-head">
-          <h3><Icon name="file-text" :size="18" /> 登记合同</h3>
-          <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-        </div>
-        <div class="modal-body">
-          <div class="field">
-            <label>合同名称 *</label>
-            <input v-model="form.name" class="input" />
-          </div>
-          <div class="grid">
-            <div class="field">
-              <label>客户 *</label>
-              <select v-model="form.customerId" class="input">
-                <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>合同金额</label>
-              <input v-model.number="form.amount" type="number" min="0" class="input" />
-            </div>
-            <div class="field">
-              <label>签订日期</label>
-              <input v-model="form.signDate" type="date" class="input" />
-            </div>
-            <div class="field">
-              <label>到期日期</label>
-              <input v-model="form.endDate" type="date" class="input" />
-            </div>
-            <div class="field">
-              <label>账期（天）</label>
-              <input v-model.number="form.paymentTerms" type="number" min="0" class="input" />
-            </div>
-          </div>
-          <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn" @click="showModal = false">取消</button>
-          <button class="btn btn-primary" :disabled="saving" @click="submit">保存</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
 .nosort { cursor: default; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; }
 .mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px; }

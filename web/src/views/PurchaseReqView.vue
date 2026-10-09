@@ -10,13 +10,8 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const loading = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
-const suppliers = ref<{ id: string; name: string }[]>([])
-const products = ref<{ id: string; name: string; sku: string }[]>([])
-const showModal = ref(false)
-const form = reactive({ supplierId: '', expectDate: '', reason: '' })
-const lines = ref<{ productId: string; qty: number }[]>([{ productId: '', qty: 1 }])
-const saving = ref(false)
 const errorMsg = ref('')
+// 起草采购申请已迁移至独立页 /new/purchase-request（见 utils/entityForms.ts）
 const notice = ref('')
 
 const STATUS: Record<string, { text: string; cls: string }> = {
@@ -37,49 +32,6 @@ async function load() {
   }
 }
 
-async function loadRefs() {
-  const s = await api.baseList('supplier', undefined, 1, 50)
-  suppliers.value = s.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  const p = await api.baseList('product', undefined, 1, 50)
-  products.value = p.list.map((x) => ({
-    id: String(x.id), name: String(x.name ?? ''), sku: String(x.sku ?? ''),
-  }))
-  if (!form.supplierId && suppliers.value.length) form.supplierId = suppliers.value[0].id
-  if (!lines.value[0].productId && products.value.length) lines.value[0].productId = products.value[0].id
-}
-
-function addLine() {
-  lines.value.push({ productId: products.value[0]?.id ?? '', qty: 1 })
-}
-
-function removeLine(i: number) {
-  if (lines.value.length === 1) return
-  lines.value.splice(i, 1)
-}
-
-async function submit() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createPurchaseRequest({
-      supplierId: form.supplierId || undefined,
-      expectDate: form.expectDate || undefined,
-      reason: form.reason || undefined,
-      items: lines.value.map((l) => ({ productId: l.productId, qty: Number(l.qty) })),
-    })
-    showModal.value = false
-    form.reason = ''
-    lines.value = [{ productId: products.value[0]?.id ?? '', qty: 1 }]
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
-
 async function act(row: Record<string, string | null>, kind: 'submit' | 'order') {
   errorMsg.value = ''
   notice.value = ''
@@ -87,6 +39,7 @@ async function act(row: Record<string, string | null>, kind: 'submit' | 'order')
     if (kind === 'submit') {
       await api.submitPurchaseRequest(String(row.id))
       notice.value = '已提交审批（主管 → 财务）'
+      toast.success('已提交审批（主管 → 财务）')
     } else {
       const r = await api.purchaseRequestToOrder(String(row.id))
       notice.value = `已生成采购订单 ${r.orderNo}（草稿，需再提交订单审批）`
@@ -95,7 +48,9 @@ async function act(row: Record<string, string | null>, kind: 'submit' | 'order')
     await load()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '操作失败'
+    const msg = err.response?.data?.msg || '操作失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
@@ -105,22 +60,14 @@ function go(p: number) {
   load()
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
-onMounted(async () => {
-  await loadRefs()
-  await load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
   <div class="card">
     <div class="card-head">
       <h3><Icon name="shopping-cart" :size="17" /> 采购申请</h3>
-      <button class="btn btn-primary btn-sm" @click="showModal = true"><Icon name="plus" :size="14" /> 起草申请</button>
+      <router-link class="btn btn-primary btn-sm" to="/new/purchase-request"><Icon name="plus" :size="14" /> 起草申请</router-link>
     </div>
 
     <div class="card-body">
@@ -183,74 +130,10 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal wide">
-      <div class="modal-head">
-        <h3><Icon name="shopping-cart" :size="18" /> 起草采购申请</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>供应商</label>
-            <select v-model="form.supplierId" class="input">
-              <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>期望到货日</label>
-            <input v-model="form.expectDate" type="date" class="input" />
-          </div>
-        </div>
-        <div class="field">
-          <label>申请事由</label>
-          <input v-model="form.reason" class="input" />
-        </div>
-
-        <div class="lines">
-          <div class="lhead">
-            <b>申请明细</b>
-            <button class="btn btn-sm btn-ghost" @click="addLine"><Icon name="plus" :size="14" /> 加行</button>
-          </div>
-          <div v-for="(l, i) in lines" :key="i" class="line">
-            <select v-model="l.productId" class="input" style="flex: 2">
-              <option v-for="p in products" :key="p.id" :value="p.id">{{ p.sku }} · {{ p.name }}</option>
-            </select>
-            <input v-model.number="l.qty" type="number" min="1" class="input" style="width: 100px" />
-            <button class="rm" :disabled="lines.length === 1" @click="removeLine(i)"><Icon name="x" :size="15" /></button>
-          </div>
-        </div>
-
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">保存</button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
-.lines { border: 1px solid var(--border-2); border-radius: var(--radius-sm); padding: 12px; margin-top: 6px; }
-.lhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
-.line { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-.rm { border: 0; background: transparent; color: var(--text-3); cursor: pointer; display: flex; padding: 4px; }
-.rm:hover:not(:disabled) { color: var(--danger); }
-.rm:disabled { opacity: .3; cursor: not-allowed; }
 .nosort { cursor: default; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; margin-top: 10px; }
 .ok { background: var(--accent-light); color: #15803d; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; margin-bottom: 10px; }
-.mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px; }
-.modal { background: #fff; border-radius: var(--radius-lg); width: 560px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal.wide { width: 700px; }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 20px 24px; max-height: 62vh; overflow: auto; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
 </style>

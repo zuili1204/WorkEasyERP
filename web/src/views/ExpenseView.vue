@@ -11,9 +11,6 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const loading = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
-const showModal = ref(false)
-const form = reactive({ category: 'travel', amount: 0, happenDate: '', reason: '' })
-const saving = ref(false)
 const errorMsg = ref('')
 
 const CATS = [
@@ -38,35 +35,7 @@ async function load() {
   }
 }
 
-function openModal() {
-  errorMsg.value = ''
-  form.amount = 0
-  form.reason = ''
-  form.happenDate = ''
-  showModal.value = true
-}
-
-async function submit() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createExpense({
-      category: form.category,
-      amount: Number(form.amount),
-      happenDate: form.happenDate || undefined,
-      reason: form.reason || undefined,
-    })
-    showModal.value = false
-    state.page = 1
-    await load()
-    toast.success('报销已登记，记得提交审批')
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
+// 新建报销已迁移至独立页 /new/expense（见 utils/entityForms.ts）
 
 async function act(id: string, kind: 'submit' | 'pay') {
   errorMsg.value = ''
@@ -92,14 +61,9 @@ function money(v: string | null) {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
 onMounted(async () => {
   state.scope = auth.user?.roles?.includes('boss') ? 'all' : 'dept'
   await load()
-  window.addEventListener('keydown', onKey)
 })
 </script>
 
@@ -107,7 +71,7 @@ onMounted(async () => {
   <div class="card">
     <div class="card-head">
       <h3><Icon name="receipt" :size="17" /> 报销</h3>
-      <button class="btn btn-primary btn-sm" @click="openModal"><Icon name="plus" :size="14" /> 发起报销</button>
+      <router-link class="btn btn-primary btn-sm" to="/new/expense"><Icon name="plus" :size="14" /> 发起报销</router-link>
     </div>
 
     <div class="card-body">
@@ -176,56 +140,10 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="receipt" :size="18" /> 发起报销</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>类别</label>
-            <select v-model="form.category" class="input">
-              <option v-for="c in CATS" :key="c[0]" :value="c[0]">{{ c[1] }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>金额 *</label>
-            <input v-model.number="form.amount" type="number" min="0" class="input" />
-          </div>
-          <div class="field">
-            <label>发生日期</label>
-            <input v-model="form.happenDate" type="date" class="input" />
-          </div>
-          <div class="field">
-            <label>事由</label>
-            <input v-model="form.reason" class="input" />
-          </div>
-        </div>
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">保存</button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
 .nosort { cursor: default; }
 .tip { font-size: 12px; color: var(--text-3); margin: 10px 0 0; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; }
-.mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px; }
-.modal { background: #fff; border-radius: var(--radius-lg); width: 560px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 20px 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
 </style>

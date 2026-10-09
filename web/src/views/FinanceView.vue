@@ -15,11 +15,8 @@ const state = reactive({ q: '', status: '', page: 1 })
 const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: SIZE })
 const loading = ref(false)
 
-const parties = ref<{ id: string; name: string }[]>([])
-const showModal = ref(false)
-const form = reactive({ type: 'receive', partyId: '', amount: 0, payMethod: 'bank', remark: '' })
-const saving = ref(false)
 const errorMsg = ref('')
+// 登记收/付款已迁移至独立页 /new/finance/receive｜pay（见 utils/entityForms.ts）
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
@@ -31,48 +28,6 @@ async function load() {
     else data.value = await api.paymentList(state.page, SIZE)
   } finally {
     loading.value = false
-  }
-}
-
-async function loadParties() {
-  if (tab.value === 'ar') {
-    const r = await api.customers(undefined, 'all', undefined, 1, 50)
-    parties.value = r.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  } else {
-    const r = await api.baseList('supplier', undefined, 1, 50)
-    parties.value = r.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  }
-  if (!form.partyId && parties.value.length) form.partyId = parties.value[0].id
-}
-
-function openPay() {
-  errorMsg.value = ''
-  form.type = tab.value === 'ar' ? 'receive' : 'pay'
-  form.amount = 0
-  form.remark = ''
-  loadParties().then(() => (showModal.value = true))
-}
-
-async function submitPay() {
-  if (!form.partyId || form.amount <= 0) return
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createPayment({
-      type: form.type,
-      counterpartyId: form.partyId,
-      amount: Number(form.amount),
-      payMethod: form.payMethod,
-      remark: form.remark || undefined,
-    })
-    showModal.value = false
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '操作失败'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -99,29 +54,22 @@ const sumRemain = computed(() =>
   data.value.list.reduce((s, r) => s + Number(r.remain_amount ?? 0), 0),
 )
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
 watch(tab, () => {
   state.page = 1
   state.q = ''
   load()
 })
 
-onMounted(() => {
-  load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
   <div class="card">
     <div class="card-head">
       <h3><Icon name="wallet" :size="17" /> 应收应付</h3>
-      <button v-if="tab !== 'pay'" class="btn btn-primary btn-sm" @click="openPay">
+      <router-link v-if="tab !== 'pay'" class="btn btn-primary btn-sm" :to="tab === 'ar' ? '/new/finance/receive' : '/new/finance/pay'">
         <Icon name="check-circle" :size="14" /> {{ tab === 'ar' ? '登记收款' : '登记付款' }}
-      </button>
+      </router-link>
     </div>
 
     <div class="card-body">
@@ -218,55 +166,9 @@ onMounted(() => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="wallet" :size="18" /> {{ form.type === 'receive' ? '登记收款' : '登记付款' }}</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>{{ form.type === 'receive' ? '客户' : '供应商' }} *</label>
-            <select v-model="form.partyId" class="input">
-              <option v-for="p in parties" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>金额 *</label>
-            <input v-model.number="form.amount" type="number" min="0" class="input" />
-          </div>
-        </div>
-        <div class="field">
-          <label>方式</label>
-          <select v-model="form.payMethod" class="input">
-            <option value="bank">银行转账</option>
-            <option value="cash">现金</option>
-            <option value="acceptance">承兑</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>备注</label>
-          <input v-model="form.remark" class="input" />
-        </div>
-        <p class="tip">按到期日由早到晚自动核销，一笔款可冲多张单；冲完自动置为「已结」</p>
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submitPay">
-          <Icon name="check" :size="15" /> 确认
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.tip { font-size: 12px; color: var(--text-3); margin: 8px 0 0; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px; margin: 10px 0 0; }
 .mask {
   position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);

@@ -9,9 +9,7 @@ const state = reactive({ q: '', status: '', page: 1 })
 const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: SIZE })
 const loading = ref(false)
 
-const warehouses = ref<{ id: string; name: string }[]>([])
-const showCreate = ref(false)
-const createForm = reactive({ warehouseId: '', remark: '' })
+// 新建盘点单已迁移至独立页 /new/stocktake（见 utils/entityForms.ts）
 
 const showItems = ref(false)
 const currentId = ref('')
@@ -29,30 +27,6 @@ async function load() {
     data.value = await api.stocktakes(state.q || undefined, state.status || undefined, state.page, SIZE)
   } finally {
     loading.value = false
-  }
-}
-
-async function loadWarehouses() {
-  const r = await api.baseList('warehouse', undefined, 1, 50)
-  warehouses.value = r.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  if (!createForm.warehouseId && warehouses.value.length) createForm.warehouseId = warehouses.value[0].id
-}
-
-async function createStocktake() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createStocktake({ warehouseId: createForm.warehouseId, remark: createForm.remark || undefined })
-    showCreate.value = false
-    createForm.remark = ''
-    state.page = 1
-    await load()
-    toast.success('已按账面库存生成盘点明细')
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '创建失败'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -125,14 +99,10 @@ function statusBadge(s: string | null) {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    showCreate.value = false
-    showItems.value = false
-  }
+  if (e.key === 'Escape') showItems.value = false
 }
 
 onMounted(async () => {
-  await loadWarehouses()
   await load()
   window.addEventListener('keydown', onKey)
 })
@@ -142,9 +112,9 @@ onMounted(async () => {
   <div class="card">
     <div class="card-head">
       <h3><Icon name="check-square" :size="17" /> 库存盘点</h3>
-      <button class="btn btn-primary btn-sm" @click="showCreate = true">
+      <router-link class="btn btn-primary btn-sm" to="/new/stocktake">
         <Icon name="plus" :size="14" /> 新建盘点单
-      </button>
+      </router-link>
     </div>
 
     <div class="card-body">
@@ -208,35 +178,6 @@ onMounted(async () => {
     </div>
   </div>
 
-  <!-- 新建盘点单 -->
-  <div v-if="showCreate" class="mask" @click.self="showCreate = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="check-square" :size="18" /> 新建盘点单</h3>
-        <span class="x" @click="showCreate = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="field">
-          <label>仓库 *</label>
-          <select v-model="createForm.warehouseId" class="input">
-            <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>备注</label>
-          <input v-model="createForm.remark" class="input" />
-        </div>
-        <p class="tip">按该仓库当前账面库存生成盘点明细，随后录入实盘数量</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showCreate = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="createStocktake">
-          <Icon name="check" :size="15" /> 生成盘点明细
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- 明细录入 -->
   <div v-if="showItems" class="mask" @click.self="showItems = false">
     <div class="modal wide">
@@ -283,8 +224,6 @@ onMounted(async () => {
 
 <style scoped>
 .nosort { cursor: default; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
 .input.sm { padding: 6px 8px; font-size: 12.5px; }
 .tip { font-size: 12px; color: var(--text-3); margin: 10px 0 0; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px; margin: 10px 0 0; }

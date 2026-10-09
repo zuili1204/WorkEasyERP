@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
 import { auth } from '../stores/auth'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 const TABS = [
@@ -15,13 +16,7 @@ const state = reactive({ q: '', page: 1 })
 const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: SIZE })
 const loading = ref(false)
 
-const products = ref<Record<string, string | null>[]>([])
-const warehouses = ref<Record<string, string | null>[]>([])
-const showModal = ref(false)
-const mode = ref<'in' | 'out'>('in')
-const form = reactive({ productId: '', warehouseId: '', qty: 1, price: 0, remark: '' })
-const saving = ref(false)
-const errorMsg = ref('')
+// 手工入/出库已迁移至独立页 /new/inventory/in｜out（见 utils/entityForms.ts）
 
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
@@ -33,49 +28,6 @@ async function load() {
       : await api.invTxns(state.q || undefined, state.page, SIZE)
   } finally {
     loading.value = false
-  }
-}
-
-async function loadRefs() {
-  const p = await api.baseList('product', undefined, 1, 50)
-  products.value = p.list
-  const w = await api.baseList('warehouse', undefined, 1, 50)
-  warehouses.value = w.list
-  if (!form.productId && p.list.length) form.productId = String(p.list[0].id)
-  if (!form.warehouseId && w.list.length) form.warehouseId = String(w.list[0].id)
-}
-
-function openMove(m: 'in' | 'out') {
-  mode.value = m
-  errorMsg.value = ''
-  form.qty = 1
-  form.price = 0
-  form.remark = ''
-  showModal.value = true
-}
-
-async function submitMove() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    const body = {
-      productId: form.productId,
-      warehouseId: form.warehouseId,
-      qty: Number(form.qty),
-      price: mode.value === 'in' ? Number(form.price) : undefined,
-      remark: form.remark || undefined,
-      refType: mode.value === 'in' ? 'purchase' : 'sales',
-    }
-    if (mode.value === 'in') await api.inbound(body)
-    else await api.outbound(body)
-    showModal.value = false
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '操作失败'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -96,13 +48,15 @@ function txnBadge(t: string | null) {
   return { text: t || '—', cls: 'badge-gray' }
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
 async function exportXlsx() {
-  const blob = await api.exportFile('inventory')
-  api.saveBlob(blob, `inventory-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  try {
+    const blob = await api.exportFile('inventory')
+    api.saveBlob(blob, `inventory-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast.success('库存 Excel 已导出')
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { msg?: string } } }
+    toast.error(err.response?.data?.msg || '导出失败')
+  }
 }
 
 watch(tab, () => {
@@ -111,11 +65,7 @@ watch(tab, () => {
   load()
 })
 
-onMounted(async () => {
-  await loadRefs()
-  await load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
@@ -123,10 +73,10 @@ onMounted(async () => {
     <div class="card-head">
       <h3><Icon name="package" :size="17" /> 库存管理</h3>
       <div class="head-actions">
-        <button class="btn btn-sm" @click="openMove('in')"><Icon name="plus" :size="14" /> 入库</button>
-        <button class="btn btn-sm btn-primary" @click="openMove('out')">
+        <router-link class="btn btn-sm" to="/new/inventory/in"><Icon name="plus" :size="14" /> 入库</router-link>
+        <router-link class="btn btn-sm btn-primary" to="/new/inventory/out">
           <Icon name="truck" :size="14" /> 出库
-        </button>
+        </router-link>
       </div>
     </div>
 
@@ -228,74 +178,9 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon :name="mode === 'in' ? 'plus' : 'truck'" :size="18" /> {{ mode === 'in' ? '入库' : '出库' }}</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="field">
-          <label>商品 *</label>
-          <select v-model="form.productId" class="input">
-            <option v-for="p in products" :key="String(p.id)" :value="String(p.id)">
-              {{ p.sku }} · {{ p.name }}
-            </option>
-          </select>
-        </div>
-        <div class="field">
-          <label>仓库 *</label>
-          <select v-model="form.warehouseId" class="input">
-            <option v-for="w in warehouses" :key="String(w.id)" :value="String(w.id)">{{ w.name }}</option>
-          </select>
-        </div>
-        <div class="grid">
-          <div class="field">
-            <label>数量 *</label>
-            <input v-model.number="form.qty" type="number" min="1" class="input" />
-          </div>
-          <div v-if="mode === 'in'" class="field">
-            <label>入库单价 *</label>
-            <input v-model.number="form.price" type="number" min="0" class="input" />
-          </div>
-        </div>
-        <div class="field">
-          <label>备注</label>
-          <input v-model="form.remark" class="input" />
-        </div>
-        <p class="tip">
-          {{ mode === 'in'
-            ? '入库按移动加权平均更新成本：(原数量×原均价 + 入库量×入库价) ÷ 新数量'
-            : '出库按当前加权成本计价并扣减数量，库存不足将拒绝' }}
-        </p>
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submitMove">
-          <Icon name="check" :size="15" /> 确认{{ mode === 'in' ? '入库' : '出库' }}
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
 .head-actions { display: flex; gap: 8px; }
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.tip { font-size: 12px; color: var(--text-3); margin: 6px 0 0; }
-.err { background: var(--danger-light); color: #B91C1C; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 12px; }
-.mask {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
-  display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 80px 20px;
-}
-.modal { background: #fff; border-radius: var(--radius-lg); width: 500px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
+
 </style>

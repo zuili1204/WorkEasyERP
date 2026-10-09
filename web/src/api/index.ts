@@ -158,6 +158,15 @@ export const api = {
   employees: (q: ListQuery) =>
     unwrap(http.get<ApiResp<PageResult<EmployeeRow>>>('/employees', { params: q })),
 
+  createEmployee: (body: {
+    employeeNo?: string
+    realName: string
+    departmentId?: string
+    position?: string
+    phone?: string
+    hireDate?: string
+  }) => unwrap(http.post<ApiResp<EmployeeRow>>('/employees', body)),
+
   departments: (q: Omit<ListQuery, 'scope' | 'status'>) =>
     unwrap(http.get<ApiResp<PageResult<DepartmentRow>>>('/departments', { params: q })),
 

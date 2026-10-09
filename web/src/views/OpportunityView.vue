@@ -4,6 +4,7 @@ import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
 import PromptDialog from '../components/PromptDialog.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 const state = reactive({ q: '', status: '', scope: 'all', page: 1 })
@@ -11,10 +12,6 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const loading = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
-const customers = ref<{ id: string; name: string }[]>([])
-const showModal = ref(false)
-const form = reactive({ name: '', customerId: '', stage: 'contact', amount: 0, expectCloseDate: '' })
-const saving = ref(false)
 const errorMsg = ref('')
 const notice = ref('')
 const showLostDialog = ref(false)
@@ -39,35 +36,7 @@ async function load() {
   }
 }
 
-async function loadCustomers() {
-  const r = await api.customers(undefined, 'all', undefined, 1, 50)
-  customers.value = r.list.map((x) => ({ id: String(x.id), name: String(x.name ?? '') }))
-  if (!form.customerId && customers.value.length) form.customerId = customers.value[0].id
-}
-
-async function submit() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createOpportunity({
-      name: form.name.trim(),
-      customerId: form.customerId || undefined,
-      stage: form.stage,
-      amount: Number(form.amount),
-      expectCloseDate: form.expectCloseDate || undefined,
-    })
-    showModal.value = false
-    form.name = ''
-    form.amount = 0
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
+// 新增商机已迁移至独立页 /new/opportunity（见 utils/entityForms.ts）
 
 async function advance(row: Record<string, string | null>, stage: string) {
   errorMsg.value = ''
@@ -85,9 +54,12 @@ async function updateStage(row: Record<string, string | null>, stage: string, re
     await api.updateOppStage(String(row.id), stage, reason)
     notice.value = stage === 'won' ? '已标记赢单，可转为合同' : `阶段已更新为「${STAGES.find((s) => s[0] === stage)?.[1]}」`
     await load()
+    toast.success(stage === 'won' ? '已标记赢单' : '阶段已更新')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '操作失败'
+    const msg = err.response?.data?.msg || '操作失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
@@ -101,9 +73,12 @@ async function toContract(row: Record<string, string | null>) {
     const r = await api.convertOpportunity(String(row.id))
     notice.value = `已生成合同 ${r.contractNo}`
     await load()
+    toast.success(`已生成合同 ${r.contractNo}`)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '转化失败'
+    const msg = err.response?.data?.msg || '转化失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
@@ -117,22 +92,14 @@ function money(v: string | null) {
   return Number(v ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
-onMounted(async () => {
-  await loadCustomers()
-  await load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
   <div class="card">
     <div class="card-head">
       <h3><Icon name="trending-up" :size="17" /> 商机管理</h3>
-      <button class="btn btn-primary btn-sm" @click="showModal = true"><Icon name="plus" :size="14" /> 新增商机</button>
+      <router-link class="btn btn-primary btn-sm" to="/new/opportunity"><Icon name="plus" :size="14" /> 新增商机</router-link>
     </div>
 
     <div class="card-body">
@@ -197,48 +164,6 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="trending-up" :size="18" /> 新增商机</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="field">
-          <label>商机名称 *</label>
-          <input v-model="form.name" class="input" />
-        </div>
-        <div class="grid">
-          <div class="field">
-            <label>客户</label>
-            <select v-model="form.customerId" class="input">
-              <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>阶段</label>
-            <select v-model="form.stage" class="input">
-              <option v-for="s in STAGES.slice(0, 4)" :key="s[0]" :value="s[0]">{{ s[1] }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>预计金额</label>
-            <input v-model.number="form.amount" type="number" min="0" class="input" />
-          </div>
-          <div class="field">
-            <label>预计成交日</label>
-            <input v-model="form.expectCloseDate" type="date" class="input" />
-          </div>
-        </div>
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">保存</button>
-      </div>
-    </div>
-  </div>
-
   <PromptDialog
     :open="showLostDialog"
     title="标记输单"
@@ -252,18 +177,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
 .nosort { cursor: default; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; margin-bottom: 10px; }
 .ok { background: var(--accent-light); color: #15803d; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; margin-bottom: 10px; }
-.mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px; }
-.modal { background: #fff; border-radius: var(--radius-lg); width: 600px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 20px 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
 </style>

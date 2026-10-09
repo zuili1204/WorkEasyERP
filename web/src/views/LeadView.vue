@@ -2,6 +2,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import EmptyState from '../components/EmptyState.vue'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 const state = reactive({ q: '', status: '', scope: 'all', page: 1 })
@@ -9,9 +11,6 @@ const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0
 const loading = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
-const showModal = ref(false)
-const form = reactive({ name: '', source: 'web', contactName: '', contactPhone: '' })
-const saving = ref(false)
 const errorMsg = ref('')
 const notice = ref('')
 
@@ -33,29 +32,7 @@ async function load() {
   }
 }
 
-async function submit() {
-  saving.value = true
-  errorMsg.value = ''
-  try {
-    await api.createLead({
-      name: form.name.trim(),
-      source: form.source,
-      contactName: form.contactName || undefined,
-      contactPhone: form.contactPhone || undefined,
-    })
-    showModal.value = false
-    form.name = ''
-    form.contactName = ''
-    form.contactPhone = ''
-    state.page = 1
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
+// 新建线索已迁移至独立页 /new/lead（见 utils/entityForms.ts）
 
 /** 线索转客户：生成客户档案并回写线索状态 */
 async function convert(row: Record<string, string | null>) {
@@ -65,9 +42,12 @@ async function convert(row: Record<string, string | null>) {
     const r = await api.convertLead(String(row.id), 'C', 0, 0)
     notice.value = `已转为客户 ${r.customerCode}，可在客户管理中完善授信与账期`
     await load()
+    toast.success(`已转为客户 ${r.customerCode}`)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '转化失败'
+    const msg = err.response?.data?.msg || '转化失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
@@ -77,21 +57,14 @@ function go(p: number) {
   load()
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') showModal.value = false
-}
-
-onMounted(async () => {
-  await load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
   <div class="card">
     <div class="card-head">
       <h3><Icon name="target" :size="17" /> 线索管理</h3>
-      <button class="btn btn-primary btn-sm" @click="showModal = true"><Icon name="plus" :size="14" /> 新增线索</button>
+      <router-link class="btn btn-primary btn-sm" to="/new/lead"><Icon name="plus" :size="14" /> 新增线索</router-link>
     </div>
 
     <div class="card-body">
@@ -139,7 +112,12 @@ onMounted(async () => {
             </tr>
           </tbody>
         </table>
-        <div v-if="!loading && data.total === 0" class="empty"><Icon name="inbox" :size="46" /><div>暂无线索</div></div>
+        <EmptyState
+          v-if="!loading && data.total === 0"
+          icon="target"
+          title="暂无线索"
+          desc="点击右上角「新增线索」登记，转化后自动生成客户档案"
+        />
       </div>
 
       <div class="pager">
@@ -150,57 +128,10 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="target" :size="18" /> 新增线索</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="field">
-          <label>线索名称 *</label>
-          <input v-model="form.name" class="input" placeholder="公司或联系人名称" />
-        </div>
-        <div class="grid">
-          <div class="field">
-            <label>来源</label>
-            <select v-model="form.source" class="input">
-              <option value="web">官网</option><option value="referral">转介绍</option>
-              <option value="exhibition">展会</option><option value="call">电话</option><option value="other">其他</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>联系人</label>
-            <input v-model="form.contactName" class="input" />
-          </div>
-          <div class="field">
-            <label>联系电话</label>
-            <input v-model="form.contactPhone" class="input" />
-          </div>
-        </div>
-        <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" :disabled="saving" @click="submit">保存</button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
 .nosort { cursor: default; }
 .err { background: var(--danger-light); color: #B91C1C; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; margin-bottom: 10px; }
 .ok { background: var(--accent-light); color: #15803d; padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12.5px; margin-bottom: 10px; }
-.mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px; }
-.modal { background: #fff; border-radius: var(--radius-lg); width: 600px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 20px 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
 </style>

@@ -8,12 +8,17 @@ const routes = [
     component: () => import('../layout/Layout.vue'),
     children: [
       { path: '', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
+      /** 统一「新建 / 发起」页：/new/order/purchase、/new/oa/overtime … 由 entityForms 注册表驱动 */
+      { path: 'new/:base/:variant?', name: 'entity-create', component: () => import('../views/EntityCreateView.vue') },
       { path: 'employees', name: 'employees', component: () => import('../views/EmployeeView.vue') },
+      { path: 'employees/new', name: 'employee-create', component: () => import('../views/EmployeeCreateView.vue') },
       { path: 'departments', name: 'departments', component: () => import('../views/DepartmentView.vue') },
       { path: 'leaves', name: 'leaves', component: () => import('../views/LeaveView.vue') },
+      { path: 'leaves/new', name: 'leave-create', component: () => import('../views/LeaveCreateView.vue') },
       { path: 'todos', name: 'todos', component: () => import('../views/TodoView.vue') },
       { path: 'notices', name: 'notices', component: () => import('../views/NoticeView.vue') },
       { path: 'oa/:bizType', name: 'oa', component: () => import('../views/OaApplyView.vue') },
+      { path: 'attendance/duty-calendar', name: 'duty-calendar', component: () => import('../views/DutyCalendarView.vue') },
       { path: 'attendance/:kind', name: 'attendance', component: () => import('../views/AttendanceView.vue') },
       { path: 'hr/:kind', name: 'hr', component: () => import('../views/HrView.vue') },
       { path: 'payroll', name: 'payroll', component: () => import('../views/PayrollView.vue') },

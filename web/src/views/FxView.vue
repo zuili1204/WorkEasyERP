@@ -2,16 +2,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
+import { toast } from '../stores/toast'
 
 const currencies = ref<Record<string, string | null>[]>([])
 const rates = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: 8 })
 const page = ref(1)
 const filterCurrency = ref('')
 
-const showCurrency = ref(false)
-const showRate = ref(false)
-const curForm = reactive({ code: '', name: '', symbol: '', decimalPlaces: 2 })
-const rateForm = reactive({ currencyFrom: '', currencyTo: 'CNY', rate: 7.12, rateDate: '', source: 'manual' })
+// 新增币种 / 录入汇率已迁移至独立页 /new/fx/currency｜rate（见 utils/entityForms.ts）
 
 const conv = reactive({ amount: 100, from: 'USD', to: 'CNY', date: '' })
 const convResult = ref<Record<string, string | null> | null>(null)
@@ -33,65 +31,16 @@ async function load() {
   }
 }
 
-function openCurrency() {
-  errorMsg.value = ''
-  curForm.code = ''
-  curForm.name = ''
-  curForm.symbol = ''
-  curForm.decimalPlaces = 2
-  showCurrency.value = true
-}
-
-function openRate() {
-  errorMsg.value = ''
-  const list = currencies.value.filter((c) => c.code !== baseCode.value)
-  if (!rateForm.currencyFrom && list.length) rateForm.currencyFrom = String(list[0].code)
-  rateForm.rateDate = ''
-  showRate.value = true
-}
-
-async function submitCurrency() {
-  errorMsg.value = ''
-  try {
-    await api.saveCurrency({
-      code: curForm.code.trim().toUpperCase(),
-      name: curForm.name.trim(),
-      symbol: curForm.symbol || undefined,
-      decimalPlaces: Number(curForm.decimalPlaces),
-    })
-    showCurrency.value = false
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  }
-}
-
-async function submitRate() {
-  errorMsg.value = ''
-  try {
-    await api.upsertFxRate({
-      currencyFrom: rateForm.currencyFrom,
-      currencyTo: rateForm.currencyTo,
-      rate: Number(rateForm.rate),
-      rateDate: rateForm.rateDate || undefined,
-      source: rateForm.source,
-    })
-    showRate.value = false
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '保存失败'
-  }
-}
-
 async function removeRate(id: string) {
   try {
     await api.deleteFxRate(id)
     await load()
+    toast.success('汇率记录已删除')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '删除失败'
+    const msg = err.response?.data?.msg || '删除失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
@@ -99,15 +48,24 @@ async function makeBase(code: string) {
   try {
     await api.setBaseCurrency(code)
     await load()
+    toast.success(`已将 ${code} 设为本位币`)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '设置失败'
+    const msg = err.response?.data?.msg || '设置失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
 async function toggle(code: string, enabled: boolean) {
-  await api.toggleCurrency(code, enabled)
-  await load()
+  try {
+    await api.toggleCurrency(code, enabled)
+    await load()
+    toast.success(`${code} 已${enabled ? '启用' : '停用'}`)
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { msg?: string } } }
+    toast.error(err.response?.data?.msg || '状态切换失败')
+  }
 }
 
 async function doConvert() {
@@ -122,21 +80,13 @@ async function doConvert() {
     )
   } catch (e: unknown) {
     const err = e as { response?: { data?: { msg?: string } } }
-    errorMsg.value = err.response?.data?.msg || '换算失败'
+    const msg = err.response?.data?.msg || '换算失败'
+    errorMsg.value = msg
+    toast.error(msg)
   }
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    showCurrency.value = false
-    showRate.value = false
-  }
-}
-
-onMounted(async () => {
-  await load()
-  window.addEventListener('keydown', onKey)
-})
+onMounted(load)
 </script>
 
 <template>
@@ -147,9 +97,9 @@ onMounted(async () => {
     <div class="card">
       <div class="card-head">
         <h3><Icon name="dollar-sign" :size="17" /> 币种</h3>
-        <button class="btn btn-primary btn-sm" @click="openCurrency">
+        <router-link class="btn btn-primary btn-sm" to="/new/fx/currency">
           <Icon name="plus" :size="14" /> 新增币种
-        </button>
+        </router-link>
       </div>
       <div class="card-body">
         <div class="cur-grid">
@@ -182,9 +132,9 @@ onMounted(async () => {
     <div class="card">
       <div class="card-head">
         <h3><Icon name="trending-up" :size="17" /> 汇率</h3>
-        <button class="btn btn-primary btn-sm" @click="openRate">
+        <router-link class="btn btn-primary btn-sm" to="/new/fx/rate">
           <Icon name="plus" :size="14" /> 录入汇率
-        </button>
+        </router-link>
       </div>
       <div class="card-body">
         <div class="toolbar">
@@ -252,79 +202,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 新增币种 -->
-    <div v-if="showCurrency" class="mask" @click.self="showCurrency = false">
-      <div class="modal">
-        <div class="modal-head">
-          <h3><Icon name="dollar-sign" :size="18" /> 新增币种</h3>
-          <span class="x" @click="showCurrency = false"><Icon name="x" :size="20" /></span>
-        </div>
-        <div class="modal-body">
-          <div class="field">
-            <label>币种代码 *</label>
-            <input v-model="curForm.code" class="input" placeholder="如 USD" maxlength="8" />
-          </div>
-          <div class="field">
-            <label>名称 *</label>
-            <input v-model="curForm.name" class="input" placeholder="如 美元" />
-          </div>
-          <div class="grid2">
-            <div class="field">
-              <label>符号</label>
-              <input v-model="curForm.symbol" class="input" placeholder="如 $" />
-            </div>
-            <div class="field">
-              <label>小数位</label>
-              <input v-model.number="curForm.decimalPlaces" type="number" min="0" max="4" class="input" />
-            </div>
-          </div>
-          <p class="tip">已存在的代码会更新名称与符号</p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn" @click="showCurrency = false">取消</button>
-          <button class="btn btn-primary" @click="submitCurrency"><Icon name="check" :size="15" /> 保存</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 录入汇率 -->
-    <div v-if="showRate" class="mask" @click.self="showRate = false">
-      <div class="modal">
-        <div class="modal-head">
-          <h3><Icon name="trending-up" :size="18" /> 录入汇率</h3>
-          <span class="x" @click="showRate = false"><Icon name="x" :size="20" /></span>
-        </div>
-        <div class="modal-body">
-          <div class="grid2">
-            <div class="field">
-              <label>源币种 *</label>
-              <select v-model="rateForm.currencyFrom" class="input">
-                <option v-for="c in currencies" :key="String(c.code)" :value="String(c.code)">{{ c.code }} · {{ c.name }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>目标币种 *</label>
-              <select v-model="rateForm.currencyTo" class="input">
-                <option v-for="c in currencies" :key="String(c.code)" :value="String(c.code)">{{ c.code }} · {{ c.name }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>汇率 *</label>
-              <input v-model.number="rateForm.rate" type="number" step="0.0001" min="0" class="input" />
-            </div>
-            <div class="field">
-              <label>生效日期</label>
-              <input v-model="rateForm.rateDate" type="date" class="input" />
-            </div>
-          </div>
-          <p class="tip">同一「币种对 + 生效日」再次录入将覆盖；换算时取 ≤ 指定日期的最新汇率</p>
-        </div>
-        <div class="modal-foot">
-          <button class="btn" @click="showRate = false">取消</button>
-          <button class="btn btn-primary" @click="submitRate"><Icon name="check" :size="15" /> 保存</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -347,16 +224,5 @@ onMounted(async () => {
 .conv { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-2); font-size: 13px; }
 .input.sm { width: auto; padding: 6px 9px; font-size: 12.5px; }
 .conv-out { background: var(--primary-light); color: var(--primary-active); padding: 5px 11px; border-radius: var(--radius-sm); font-size: 12.5px; }
-.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.field { margin-bottom: 13px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.tip { font-size: 12px; color: var(--text-3); margin: 0; }
-.mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); backdrop-filter: blur(3px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 60px 20px; }
-.modal { background: #fff; border-radius: var(--radius-lg); width: 560px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 20px 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
+
 </style>

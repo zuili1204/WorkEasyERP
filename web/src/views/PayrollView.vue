@@ -3,53 +3,27 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type PageResult } from '../api'
 import Icon from '../components/Icon.vue'
 import { auth } from '../stores/auth'
+import { toast } from '../stores/toast'
 
 const SIZE = 8
 
 const state = reactive({ period: '', scope: 'mine', page: 1 })
 const data = ref<PageResult<Record<string, string | null>>>({ list: [], total: 0, page: 1, size: SIZE })
 const loading = ref(false)
-const showModal = ref(false)
-const form = reactive({
-  period: new Date().toISOString().slice(0, 7),
-  baseSalary: 8000,
-  bonus: 0,
-  allowance: 500,
-  deduction: 0,
-  socialSecurity: 800,
-  tax: 300,
-})
-
 const totalPages = computed(() => Math.max(1, Math.ceil(data.value.total / SIZE)))
 
-// 实发由服务端计算；此处仅用于界面预览
-const previewNet = computed(
-  () =>
-    Number(form.baseSalary || 0) + Number(form.bonus || 0) + Number(form.allowance || 0) -
-    Number(form.deduction || 0) - Number(form.socialSecurity || 0) - Number(form.tax || 0),
-)
+// 生成薪资已迁移至独立页 /new/payroll（见 utils/entityForms.ts）
 
 async function load() {
   loading.value = true
   try {
     data.value = await api.payrollList(state.period || undefined, state.scope, state.page, SIZE)
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { msg?: string } } }
+    toast.error(err.response?.data?.msg || '薪资列表加载失败')
   } finally {
     loading.value = false
   }
-}
-
-async function generate() {
-  await api.payrollGenerate({
-    period: form.period,
-    baseSalary: Number(form.baseSalary),
-    bonus: Number(form.bonus),
-    allowance: Number(form.allowance),
-    deduction: Number(form.deduction),
-    socialSecurity: Number(form.socialSecurity),
-    tax: Number(form.tax),
-  })
-  showModal.value = false
-  load()
 }
 
 function go(p: number) {
@@ -71,9 +45,9 @@ onMounted(load)
   <div class="card">
     <div class="card-head">
       <h3><Icon name="wallet" :size="17" /> 薪资核算</h3>
-      <button class="btn btn-primary btn-sm" @click="showModal = true">
+      <router-link class="btn btn-primary btn-sm" to="/new/payroll">
         <Icon name="plus" :size="14" /> 生成薪资
-      </button>
+      </router-link>
     </div>
 
     <div class="card-body">
@@ -141,67 +115,8 @@ onMounted(load)
     </div>
   </div>
 
-  <div v-if="showModal" class="mask" @click.self="showModal = false">
-    <div class="modal">
-      <div class="modal-head">
-        <h3><Icon name="wallet" :size="18" /> 生成薪资</h3>
-        <span class="x" @click="showModal = false"><Icon name="x" :size="20" /></span>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>期间</label>
-            <input v-model="form.period" class="input" placeholder="2026-10" />
-          </div>
-          <div class="field">
-            <label>基本工资</label>
-            <input v-model.number="form.baseSalary" type="number" class="input" />
-          </div>
-          <div class="field">
-            <label>奖金</label>
-            <input v-model.number="form.bonus" type="number" class="input" />
-          </div>
-          <div class="field">
-            <label>津贴</label>
-            <input v-model.number="form.allowance" type="number" class="input" />
-          </div>
-          <div class="field">
-            <label>扣款</label>
-            <input v-model.number="form.deduction" type="number" class="input" />
-          </div>
-          <div class="field">
-            <label>社保</label>
-            <input v-model.number="form.socialSecurity" type="number" class="input" />
-          </div>
-          <div class="field">
-            <label>个税</label>
-            <input v-model.number="form.tax" type="number" class="input" />
-          </div>
-        </div>
-        <p class="tip">实发预览：<b>{{ previewNet.toFixed(2) }}</b>（以服务端计算为准）</p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" @click="showModal = false">取消</button>
-        <button class="btn btn-primary" @click="generate"><Icon name="check" :size="15" /> 生成</button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.tip { font-size: 12.5px; color: var(--text-3); margin: 6px 0 0; }
-.mask {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
-  display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 80px 20px;
-}
-.modal { background: #fff; border-radius: var(--radius-lg); width: 560px; max-width: 100%; box-shadow: var(--shadow-lg); }
-.modal-head { padding: 18px 24px; border-bottom: 1px solid var(--border-2); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
-.modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: 24px; }
-.modal-foot { padding: 15px 24px; border-top: 1px solid var(--border-2); display: flex; justify-content: flex-end; gap: 10px; }
+
 </style>
