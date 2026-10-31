@@ -5,6 +5,7 @@ server/data/
 server/boot.log
 *.class
 *.log
+*.err
 
 # ===== Gradle =====
 .gradle/
@@ -13,6 +14,8 @@ server/.gradle/
 # ===== Node / 前端 =====
 web/node_modules/
 web/dist/
+miniapp/node_modules/
+miniapp/dist/
 npm-cache/
 
 # ===== IDE =====

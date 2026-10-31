@@ -1,0 +1,23 @@
+{
+  "name": "workeasy-mall-miniapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkEasy 订货商城小程序（uni-app + Vue3 + TypeScript）",
+  "scripts": {
+    "dev:mp-weixin": "node scripts/cli.mjs -p mp-weixin",
+    "build:mp-weixin": "node scripts/cli.mjs build -p mp-weixin"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "vue3",
+    "@dcloudio/uni-components": "vue3",
+    "@dcloudio/uni-h5": "vue3",
+    "@dcloudio/uni-mp-weixin": "vue3",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4.8",
+    "@dcloudio/vite-plugin-uni": "vue3",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.8"
+  }
+}
