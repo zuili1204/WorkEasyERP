@@ -48,8 +48,23 @@ class OrderController(private val service: OrderService) {
     fun createSalesOrder(@RequestBody req: OrderCreateRequest): ApiResponse<Map<String, Any?>> =
         ApiResponse.ok(service.createSo(req))
 
+    /** 下单预览：按客户取价 + 授信校验（只读，不落单） */
+    @PostMapping("/sales/preview")
+    fun previewSalesOrder(@RequestBody req: OrderCreateRequest): ApiResponse<Map<String, Any?>> =
+        ApiResponse.ok(service.previewSales(req))
+
     /** 提交销售订单审批（草稿 / 已驳回 可提交） */
     @PostMapping("/sales/{id}/submit")
     fun submitSalesOrder(@PathVariable id: String): ApiResponse<Map<String, Any?>> =
         ApiResponse.ok(service.submit("sales", UUID.fromString(id)))
+
+    /** 取消销售订单并释放库存锁定 */
+    @PostMapping("/sales/{id}/cancel")
+    fun cancelSalesOrder(@PathVariable id: String): ApiResponse<Map<String, Any?>> =
+        ApiResponse.ok(service.cancelSales(UUID.fromString(id)))
+
+    /** 超时释放：逾期未处理的草稿销售订单自动取消并释放锁定 */
+    @PostMapping("/sales/expire")
+    fun expireSalesOrders(@RequestParam(defaultValue = "7") days: Int): ApiResponse<Map<String, Any?>> =
+        ApiResponse.ok(service.expireSales(days))
 }

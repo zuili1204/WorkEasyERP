@@ -5,12 +5,14 @@ import com.workeasy.erp.common.PageResult
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 data class AssignPermissionRequest(val codes: List<String> = emptyList())
+data class SettingRequest(val key: String = "", val value: String = "")
 
 @RestController
 @RequestMapping("/system")
@@ -46,6 +48,16 @@ class SystemController(private val service: SystemService) {
         @RequestBody req: AssignPermissionRequest,
     ): ApiResponse<Boolean> {
         service.assignPermissions(code, req.codes)
+        return ApiResponse.ok(true)
+    }
+
+    /** 租户设置（授信超限策略等） */
+    @GetMapping("/settings")
+    fun settings(): ApiResponse<List<Map<String, Any?>>> = ApiResponse.ok(service.settings())
+
+    @PutMapping("/settings")
+    fun updateSetting(@RequestBody req: SettingRequest): ApiResponse<Boolean> {
+        service.updateSetting(req.key, req.value)
         return ApiResponse.ok(true)
     }
 

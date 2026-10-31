@@ -2,12 +2,10 @@ package com.workeasy.erp.trade
 
 import com.workeasy.erp.common.BizException
 import com.workeasy.erp.common.ErrorCode
-import org.apache.poi.ss.usermodel.HorizontalAlignment
-import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import com.workeasy.erp.common.ExcelUtil
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.io.ByteArrayOutputStream
 
 /**
  * 报表导出：查询 → 生成 xlsx（表头加粗 + 冻结首行 + 自适应列宽）。
@@ -64,37 +62,8 @@ class ExportService(private val jdbc: JdbcTemplate) {
     fun export(type: String): ByteArray {
         val def = EXPORTS[type] ?: throw BizException(ErrorCode.BIZ_PARAM, "不支持的导出类型：$type")
         val rows = jdbc.queryForList(def.sql)
-
-        XSSFWorkbook().use { wb ->
-            val sheet = wb.createSheet(def.title)
-            val headStyle = wb.createCellStyle().apply {
-                val f = wb.createFont()
-                f.bold = true
-                setFont(f)
-                alignment = HorizontalAlignment.CENTER
-            }
-
-            val header = sheet.createRow(0)
-            def.headers.forEachIndexed { i, h ->
-                val c = header.createCell(i)
-                c.setCellValue(h)
-                c.cellStyle = headStyle
-            }
-
-            rows.forEachIndexed { r, row ->
-                val line = sheet.createRow(r + 1)
-                def.headers.indices.forEach { i ->
-                    val key = row.keys.elementAt(i)
-                    line.createCell(i).setCellValue(row[key]?.toString() ?: "")
-                }
-            }
-
-            def.headers.indices.forEach { sheet.autoSizeColumn(it) }
-            sheet.createFreezePane(0, 1)
-
-            val out = ByteArrayOutputStream()
-            wb.write(out)
-            return out.toByteArray()
-        }
+        // queryForList 的 key 顺序即 SQL 列顺序，按表头下标取值
+        val values = rows.map { row -> def.headers.indices.map { i -> row[row.keys.elementAt(i)] } }
+        return ExcelUtil.write(def.title, def.headers, values)
     }
 }

@@ -25,7 +25,7 @@ private data class BaseConfig(
 private val BASE_CONFIG: Map<String, BaseConfig> = mapOf(
     "category" to BaseConfig("product_category", null, "商品分类", listOf("code", "name", "sortNo"), "name"),
     "product" to BaseConfig("product", null, "商品 / SKU",
-        listOf("sku", "name", "spec", "unit", "salePrice", "taxRate"), "name"),
+        listOf("sku", "name", "spec", "unit", "auxUnit", "convertRate", "salePrice", "taxRate"), "name"),
     "supplier" to BaseConfig("supplier", "SUP", "供应商",
         listOf("code", "name", "contactName", "contactPhone", "paymentTerms"), "name"),
     "warehouse" to BaseConfig("warehouse", null, "仓库", listOf("code", "name", "location", "type"), "name"),
@@ -40,6 +40,8 @@ private val BASE_FIELD_SQL: Map<String, Pair<String, String>> = mapOf(
     "sku" to ("sku" to "?"),
     "spec" to ("spec" to "?"),
     "unit" to ("unit" to "?"),
+    "auxUnit" to ("aux_unit" to "?"),
+    "convertRate" to ("convert_rate" to "?::numeric"),
     "salePrice" to ("sale_price" to "?::numeric"),
     "taxRate" to ("tax_rate" to "?::numeric"),
     "contactName" to ("contact_name" to "?"),

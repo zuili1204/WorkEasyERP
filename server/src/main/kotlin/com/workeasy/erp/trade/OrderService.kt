@@ -25,6 +25,8 @@ data class OrderItemRequest(
     val qty: BigDecimal = BigDecimal.ZERO,
     val price: BigDecimal = BigDecimal.ZERO,
     val taxRate: BigDecimal = BigDecimal("0.13"),
+    /** 录入单位：留空=主单位；填辅助单位时按商品换算率折算为主单位 */
+    val unit: String? = null,
 )
 
 data class OrderCreateRequest(
@@ -51,6 +53,9 @@ class OrderService(
     private val noGenerator: NoGenerator,
     private val audit: AuditService,
     private val scopeResolver: ScopeResolver,
+    private val inventoryService: InventoryService,
+    private val creditService: CreditService,
+    private val priceService: PriceService,
 ) {
 
     // ---------- 采购订单 ----------
@@ -71,6 +76,63 @@ class OrderService(
     @Transactional
     fun createSo(req: OrderCreateRequest): Map<String, Any?> = createOrder("sales", req)
 
+    /**
+     * 下单预览：按客户取价（协议价 > 等级价 > 标准售价）+ 授信校验。
+     * 只读，不锁库存、不落单；客户端传入的价格一律忽略。
+     */
+    @Transactional(readOnly = true)
+    fun previewSales(req: OrderCreateRequest): Map<String, Any?> {
+        val customerId = if (req.partyId.isNotBlank()) req.partyId else (req.customerId ?: "")
+        if (customerId.isBlank()) throw BizException(ErrorCode.BIZ_PARAM, "客户不能为空")
+        if (req.items.isEmpty()) throw BizException(ErrorCode.BIZ_PARAM, "明细行不能为空")
+
+        // 先按录入单位折算为主单位数量，取价与金额一律走主单位口径
+        val prepared = req.items.map { line ->
+            line to UnitConversion.resolve(jdbc, line.productId, line.qty, BigDecimal.ZERO, line.unit)
+        }
+        val quoted = priceService.quote(
+            QuoteRequest(
+                customerId = customerId,
+                items = prepared.map { (line, u) -> QuoteItemRequest(line.productId, u.qty) },
+            )
+        )
+        var totalNet = BigDecimal.ZERO
+        var totalTax = BigDecimal.ZERO
+        val lines = quoted.mapIndexed { idx, q ->
+            val u = prepared[idx].second
+            val taxRate = bd(
+                jdbc.queryForObject(
+                    "SELECT COALESCE(tax_rate,0) FROM product WHERE id = ?::uuid",
+                    BigDecimal::class.java,
+                    q["productId"]?.toString() ?: "",
+                )
+            )
+            val net = (bd(q["price"]) * bd(q["qty"])).setScale(2, RoundingMode.HALF_UP)
+            val tax = (net * taxRate).setScale(2, RoundingMode.HALF_UP)
+            totalNet += net
+            totalTax += tax
+            q + mapOf(
+                "auxUnit" to u.auxUnit,
+                "auxQty" to u.auxQty,
+                "convertRate" to u.convertRate,
+                "taxRate" to taxRate,
+                "netAmount" to net,
+                "taxAmount" to tax,
+                "totalAmount" to (net + tax),
+            )
+        }
+        val totalAmount = totalNet + totalTax
+        val credit = creditService.check(customerId, totalAmount)
+        return mapOf(
+            "customerId" to customerId,
+            "lines" to lines,
+            "totalNet" to totalNet.setScale(2, RoundingMode.HALF_UP),
+            "totalTax" to totalTax.setScale(2, RoundingMode.HALF_UP),
+            "totalAmount" to totalAmount.setScale(2, RoundingMode.HALF_UP),
+            "credit" to credit.toMap(),
+        )
+    }
+
     // ---------- 订单审批 ----------
 
     /** 提交审批：订单从 draft → approving，并写入流程实例 */
@@ -90,7 +152,11 @@ class OrderService(
                 bizType = bizType,
                 bizId = id,
                 title = "${if (isSales) "销售" else "采购"}订单 $no",
-                formData = mapOf("orderNo" to no, "amount" to bd(head["total_amount"]).toPlainString()),
+                formData = mapOf(
+                    "orderNo" to no,
+                    "amount" to bd(head["total_amount"]).toPlainString(),
+                    "creditOver" to (head["credit_over"]?.toString() ?: "false"),
+                ),
             ),
             UserContext.get(),
         )
@@ -108,6 +174,9 @@ class OrderService(
     fun onFinished(e: WorkflowFinishedEvent) {
         if (e.bizType != "purchase_order" && e.bizType != "sales_order") return
         val table = if (e.bizType == "sales_order") "sales_order" else "purchase_order"
+        // 已取消/关闭的订单不再被流程结果覆盖（避免取消后又被置为 approved）
+        val current = statusOf(e.bizType, e.bizId.toString())
+        if (current == "void" || current == "closed") return
         val approved = e.result == "approved"
         val status = if (approved) "approved" else "rejected"
         jdbc.update(
@@ -185,6 +254,69 @@ class OrderService(
         jdbc.update("UPDATE sales_order SET status = ?, updated_at = now() WHERE id = ?::uuid", status, orderId.toString())
     }
 
+    // ---------- 取消 / 超时释放锁定 ----------
+
+    /** 取消销售订单：未发货前可取消，同时释放下单时占用的库存锁定 */
+    @Transactional
+    fun cancelSales(id: UUID): Map<String, Any?> {
+        val head = jdbc.queryForMap(
+            "SELECT id, order_no, status FROM sales_order WHERE id = ?::uuid FOR UPDATE",
+            id.toString(),
+        )
+        val status = head["status"]?.toString()
+        if (status in setOf("shipped", "partial", "closed", "void")) {
+            throw BizException(ErrorCode.BIZ_CONFLICT, "已发货/已关闭/已取消的订单不能取消（当前：$status）")
+        }
+        val no = head["order_no"]?.toString() ?: id.toString()
+        releaseLocks(id, no)
+        jdbc.update("UPDATE sales_order SET status = 'void', updated_at = now() WHERE id = ?::uuid", id.toString())
+        audit.log("order", "取消销售订单 $no，释放库存锁定", "sales_order", id.toString())
+        return mapOf("id" to id.toString(), "status" to "void")
+    }
+
+    /** 超时释放：把超过 N 天仍为草稿的销售订单自动取消并释放锁定（单次最多 200 单，可重复执行） */
+    @Transactional
+    fun expireSales(days: Int): Map<String, Any?> {
+        val d = days.coerceIn(1, 365)
+        val ids = jdbc.queryForList(
+            """
+            SELECT id FROM sales_order
+            WHERE status = 'draft' AND deleted_at IS NULL
+              AND created_at < now() - make_interval(days => ?::int)
+            ORDER BY created_at
+            LIMIT 200
+            """.trimIndent(),
+            String::class.java,
+            d,
+        )
+        ids.forEach { cancelSales(UUID.fromString(it)) }
+        return mapOf("count" to ids.size)
+    }
+
+    /** 释放订单行剩余未发货数量对应的锁定（无锁定记录时为空操作） */
+    private fun releaseLocks(orderId: UUID, orderNo: String) {
+        jdbc.queryForList(
+            "SELECT product_id, qty, shipped_qty, warehouse_id FROM sales_order_item WHERE order_id = ?::uuid",
+            orderId.toString(),
+        ).forEach { row ->
+            val productId = row["product_id"]?.toString() ?: return@forEach
+            val warehouseId = row["warehouse_id"]?.toString() ?: return@forEach
+            val remain = bd(row["qty"]) - bd(row["shipped_qty"])
+            if (remain > BigDecimal.ZERO) {
+                inventoryService.release(
+                    StockLockRequest(
+                        productId = productId,
+                        warehouseId = warehouseId,
+                        qty = remain,
+                        refType = "sales_order",
+                        refNo = orderNo,
+                        remark = "取消/超时释放",
+                    )
+                )
+            }
+        }
+    }
+
     // ---------- 内部实现 ----------
 
     private fun createOrder(type: String, req: OrderCreateRequest): Map<String, Any?> {
@@ -196,6 +328,10 @@ class OrderService(
         }
         if (partyId.isBlank()) throw BizException(ErrorCode.BIZ_PARAM, if (isSales) "客户不能为空" else "供应商不能为空")
         if (req.items.isEmpty()) throw BizException(ErrorCode.BIZ_PARAM, "明细行不能为空")
+        // 销售订单必须指定发货仓：下单即锁定该仓库存
+        if (isSales && req.warehouseId.isNullOrBlank()) {
+            throw BizException(ErrorCode.BIZ_PARAM, "销售订单必须选择发货仓库")
+        }
 
         val me = UserContext.get()
         val id = UUID.randomUUID()
@@ -235,10 +371,29 @@ class OrderService(
 
         req.items.forEachIndexed { idx, line ->
             val p = jdbc.queryForMap(
-                "SELECT name, spec, unit, COALESCE(sale_price,0) AS sale_price FROM product WHERE id = ?::uuid",
+                """
+                SELECT name, spec, unit, aux_unit, convert_rate, COALESCE(sale_price,0) AS sale_price,
+                       COALESCE(min_sale_price,0) AS min_sale_price
+                FROM product WHERE id = ?::uuid
+                """.trimIndent(),
                 line.productId,
             )
-            val net = line.qty * line.price
+            // 录入单位 → 主单位：数量与单价统一折算，库存/成本/报表口径保持不变
+            val u = UnitConversion.resolve(
+                line.qty, line.price, line.unit,
+                p["unit"]?.toString(), p["aux_unit"]?.toString(), bd(p["convert_rate"]),
+            )
+            // 最低售价校验：低于商品底线不允许成交（0 表示不限制）
+            if (isSales) {
+                val floor = bd(p["min_sale_price"])
+                if (floor > BigDecimal.ZERO && u.price < floor) {
+                    throw BizException(
+                        ErrorCode.BIZ_CONFLICT,
+                        "商品 ${p["name"]} 售价 ${u.price} 低于最低售价 $floor",
+                    )
+                }
+            }
+            val net = u.qty * u.price
             val tax = net * line.taxRate
             // 销售订单冻结当前加权成本（来自 inventory），用于计算毛利
             val costPrice = if (isSales) {
@@ -252,9 +407,9 @@ class OrderService(
             } else {
                 BigDecimal.ZERO
             }
-            val costAmount = if (isSales) costPrice * line.qty else BigDecimal.ZERO
+            val costAmount = if (isSales) costPrice * u.qty else BigDecimal.ZERO
 
-            totalQty += line.qty
+            totalQty += u.qty
             totalNet += net
             totalTax += tax
             totalCost += costAmount
@@ -266,33 +421,62 @@ class OrderService(
                     """
                     INSERT INTO sales_order_item(order_id, line_no, product_id, product_name, spec, unit,
                                                  qty, price, tax_rate, tax_amount, net_amount, amount,
-                                                 cost_price, cost_amount, profit, profit_rate, shipped_qty, unship_qty, warehouse_id)
-                    VALUES (?::uuid, ?, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?::uuid)
+                                                 cost_price, cost_amount, profit, profit_rate, shipped_qty, unship_qty,
+                                                 warehouse_id, aux_unit, aux_qty, convert_rate)
+                    VALUES (?::uuid, ?, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?::uuid, ?, ?, ?)
                     """.trimIndent(),
                     id.toString(), idx + 1, line.productId, p["name"].toString(), p["spec"]?.toString(),
-                    p["unit"]?.toString(), line.qty, line.price, line.taxRate,
+                    u.unit, u.qty, u.price, line.taxRate,
                     tax.setScale(2, RoundingMode.HALF_UP), net.setScale(2, RoundingMode.HALF_UP),
                     (net + tax).setScale(2, RoundingMode.HALF_UP), costPrice,
                     costAmount.setScale(2, RoundingMode.HALF_UP), profit.setScale(2, RoundingMode.HALF_UP),
-                    rate, line.qty, req.warehouseId,
+                    rate, u.qty, req.warehouseId, u.auxUnit, u.auxQty, u.convertRate,
                 )
             } else {
                 jdbc.update(
                     """
                     INSERT INTO purchase_order_item(order_id, line_no, product_id, product_name, spec, unit,
                                                     qty, price, tax_rate, tax_amount, net_amount, amount,
-                                                    received_qty, warehouse_id)
-                    VALUES (?::uuid, ?, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?::uuid)
+                                                    received_qty, warehouse_id, aux_unit, aux_qty, convert_rate)
+                    VALUES (?::uuid, ?, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?::uuid, ?, ?, ?)
                     """.trimIndent(),
                     id.toString(), idx + 1, line.productId, p["name"].toString(), p["spec"]?.toString(),
-                    p["unit"]?.toString(), line.qty, line.price, line.taxRate,
+                    u.unit, u.qty, u.price, line.taxRate,
                     tax.setScale(2, RoundingMode.HALF_UP), net.setScale(2, RoundingMode.HALF_UP),
                     (net + tax).setScale(2, RoundingMode.HALF_UP), req.warehouseId,
+                    u.auxUnit, u.auxQty, u.convertRate,
+                )
+            }
+
+            // 销售订单下单即锁定库存，可用量不足整单回滚
+            if (isSales) {
+                inventoryService.lock(
+                    StockLockRequest(
+                        productId = line.productId,
+                        warehouseId = req.warehouseId!!,
+                        qty = u.qty,
+                        refType = "sales_order",
+                        refNo = no,
+                        remark = "下单锁定",
+                    )
                 )
             }
         }
 
         val totalAmount = totalNet + totalTax
+        // 订单确认：统一授信校验（超限按租户策略拦截或转经理审批）
+        var creditOver = false
+        if (isSales) {
+            val chk = creditService.check(partyId, totalAmount, id.toString())
+            if (chk.action == "block") {
+                throw BizException(ErrorCode.BIZ_CONFLICT, chk.message ?: "超出客户授信额度")
+            }
+            if (chk.action == "approval") {
+                creditOver = true
+                jdbc.update("UPDATE sales_order SET credit_over = true WHERE id = ?::uuid", id.toString())
+                audit.log("order", "订单 $no 超出授信，转经理审批（可用 ${chk.available}）", "sales_order", id.toString())
+            }
+        }
         if (isSales) {
             val profit = totalNet - totalCost
             val rate = if (totalNet > BigDecimal.ZERO) profit.divide(totalNet, 4, RoundingMode.HALF_UP) else BigDecimal.ZERO
@@ -315,7 +499,12 @@ class OrderService(
         }
 
         audit.log("order", "创建${if (isSales) "销售" else "采购"}订单 $no", if (isSales) "sales_order" else "purchase_order", id.toString())
-        return mapOf("id" to id.toString(), "orderNo" to no, "status" to "draft")
+        return mapOf(
+            "id" to id.toString(),
+            "orderNo" to no,
+            "status" to "draft",
+            "creditOver" to creditOver,
+        )
     }
 
     private fun orderList(

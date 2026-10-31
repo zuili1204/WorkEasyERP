@@ -1,5 +1,7 @@
 package com.workeasy.erp.system
 
+import com.workeasy.erp.common.BizException
+import com.workeasy.erp.common.ErrorCode
 import com.workeasy.erp.common.PageResult
 import com.workeasy.erp.common.Paging
 import com.workeasy.erp.config.UserContext
@@ -119,4 +121,33 @@ class SystemService(
         "SELECT DISTINCT module FROM audit_log WHERE module IS NOT NULL ORDER BY module",
         String::class.java,
     )
+
+    // ---------- 租户设置 ----------
+
+    /** 读取设置（不存在时返回默认值；供授信等业务规则共用） */
+    @Transactional(readOnly = true)
+    fun setting(key: String, default: String): String =
+        jdbc.queryForList("SELECT value FROM sys_setting WHERE key = ?", String::class.java, key)
+            .firstOrNull() ?: default
+
+    @Transactional(readOnly = true)
+    fun settings(): List<Map<String, Any?>> = jdbc.queryForList(
+        "SELECT key, value, remark, updated_at FROM sys_setting ORDER BY key"
+    ).map { it.mapValues { (_, v) -> v?.toString() } }
+
+    @Transactional
+    fun updateSetting(key: String, value: String) {
+        if (key.isBlank()) throw BizException(ErrorCode.BIZ_PARAM, "设置键不能为空")
+        if (key == "credit.overflow_mode" && value !in setOf("approval", "block")) {
+            throw BizException(ErrorCode.BIZ_PARAM, "授信超限策略只能是 approval/block")
+        }
+        jdbc.update(
+            """
+            INSERT INTO sys_setting(key, value) VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+            """.trimIndent(),
+            key, value,
+        )
+        audit.log("system", "更新设置 $key=$value", "sys_setting", key)
+    }
 }

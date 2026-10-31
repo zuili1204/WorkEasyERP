@@ -34,6 +34,7 @@ class OutboundService(
     private val noGenerator: NoGenerator,
     private val audit: AuditService,
     private val scopeResolver: ScopeResolver,
+    private val creditService: CreditService,
 ) {
 
     @Transactional(readOnly = true)
@@ -102,21 +103,26 @@ class OutboundService(
             id.toString(), no, req.orderId, req.customerId, customerName, req.warehouseId, req.remark, me.userId.toString(),
         )
         req.items.forEach { line ->
-            val name = jdbc.queryForObject(
-                "SELECT name FROM product WHERE id = ?::uuid", String::class.java, line.productId
+            val p = jdbc.queryForMap(
+                "SELECT name, unit, aux_unit, convert_rate FROM product WHERE id = ?::uuid",
+                line.productId,
             )
-            val unit = jdbc.queryForObject(
-                "SELECT unit FROM product WHERE id = ?::uuid", String::class.java, line.productId
+            // 录入单位 → 主单位；出库扣减与流水一律主单位口径
+            val u = UnitConversion.resolve(
+                line.qty, line.price, line.unit,
+                p["unit"]?.toString(), p["aux_unit"]?.toString(), bd(p["convert_rate"]),
             )
-            val amount = line.qty * line.price * (BigDecimal.ONE + line.taxRate)
-            totalQty += line.qty
+            val amount = u.qty * u.price * (BigDecimal.ONE + line.taxRate)
+            totalQty += u.qty
             totalAmount += amount
             jdbc.update(
                 """
-                INSERT INTO sales_outbound_item(outbound_id, product_id, product_name, unit, qty, price, tax_rate, amount, batch_no, location)
-                VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sales_outbound_item(outbound_id, product_id, product_name, unit, qty, price,
+                                                aux_unit, aux_qty, convert_rate, tax_rate, amount, batch_no, location)
+                VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                id.toString(), line.productId, name, unit, line.qty, line.price, line.taxRate,
+                id.toString(), line.productId, p["name"].toString(), u.unit, u.qty, u.price,
+                u.auxUnit, u.auxQty, u.convertRate, line.taxRate,
                 amount.setScale(2, RoundingMode.HALF_UP), line.batchNo, line.location,
             )
         }
@@ -145,29 +151,39 @@ class OutboundService(
 
         val amount = bd(head["total_amount"])
 
-        // 关联销售订单时，订单须已审批通过才能发货
+        // 关联销售订单时，订单须已审批通过才能发货；渠道决定财务处理口径
         val orderId = head["order_id"]?.toString()
+        var mallChannel = false
         if (orderId != null) {
-            val st = jdbc.queryForObject(
-                "SELECT status FROM sales_order WHERE id = ?::uuid", String::class.java, orderId
+            val so = jdbc.queryForMap(
+                "SELECT status, channel FROM sales_order WHERE id = ?::uuid", orderId
             )
+            val st = so["status"]?.toString()
             if (st != "approved") {
                 throw BizException(ErrorCode.BIZ_CONFLICT, "销售订单尚未审批通过（当前：$st），不能发货")
             }
+            mallChannel = (so["channel"]?.toString() ?: "erp") == "mall"
         }
 
-        // 授信校验：可用授信 = 额度 - 已用
+        // 授信校验：与下单预览/订单确认同一口径；超限按策略拦截或审批放行。
+        // 商城订单的应收与授信占用已在下单/支付时完成，此处不重复校验与占用。
         val cust = jdbc.queryForMap(
-            "SELECT credit_limit, COALESCE(credit_used,0) AS credit_used, payment_terms FROM customer WHERE id = ?::uuid",
+            "SELECT payment_terms FROM customer WHERE id = ?::uuid",
             head["customer_id"].toString(),
         )
-        val limit = bd(cust["credit_limit"])
-        val used = bd(cust["credit_used"])
-        if (limit > BigDecimal.ZERO && used + amount > limit) {
-            throw BizException(
-                ErrorCode.BIZ_CONFLICT,
-                "超出客户可用授信：额度 $limit，已用 $used，本次 $amount",
-            )
+        if (!mallChannel) {
+            val chk = creditService.check(head["customer_id"].toString(), amount, orderId)
+            if (chk.action == "block") {
+                throw BizException(ErrorCode.BIZ_CONFLICT, chk.message ?: "超出客户授信额度")
+            }
+            if (chk.action == "approval") {
+                audit.log(
+                    "sales",
+                    "出库单 $no 超出授信，按经理审批放行（可用 ${chk.available}）",
+                    "sales_outbound",
+                    id.toString(),
+                )
+            }
         }
 
         val productQty = mutableMapOf<String, BigDecimal>()
@@ -185,6 +201,10 @@ class OutboundService(
                     refType = "sales",
                     refNo = no,
                     remark = "销售出库 $no",
+                    releaseLocked = orderId != null,
+                    auxUnit = it["aux_unit"]?.toString(),
+                    auxQty = it["aux_qty"]?.let { v -> bd(v) },
+                    convertRate = it["convert_rate"]?.let { v -> bd(v) },
                 )
             )
         }
@@ -194,6 +214,24 @@ class OutboundService(
         // 回写销售订单已发数量并推进订单状态
         if (orderId != null) {
             orderService.applyOutbound(UUID.fromString(orderId), productQty)
+        }
+
+        if (mallChannel) {
+            // 商城订单的应收/核销在支付或账期确认时已生成，出库只同步发货状态
+            val soStatus = jdbc.queryForList(
+                "SELECT status FROM sales_order WHERE id = ?::uuid", String::class.java, orderId
+            ).firstOrNull()
+            if (soStatus == "shipped") {
+                jdbc.update(
+                    """
+                    UPDATE mall_order SET status = 'shipped', shipped_at = COALESCE(shipped_at, now()), updated_at = now()
+                    WHERE sales_order_id = ?::uuid AND status = 'pending_ship'
+                    """.trimIndent(),
+                    orderId,
+                )
+            }
+            audit.log("sales", "审核商城出库单 $no，同步商城发货状态", "sales_outbound", id.toString())
+            return
         }
 
         val terms = (cust["payment_terms"] as? Number)?.toInt() ?: 0

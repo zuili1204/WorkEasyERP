@@ -18,6 +18,7 @@ data class LineItem(
     val qty: BigDecimal = BigDecimal.ZERO,
     val price: BigDecimal = BigDecimal.ZERO,
     val taxRate: BigDecimal = BigDecimal("0.13"),
+    val unit: String? = null,
     val batchNo: String? = null,
     val location: String? = null,
 )
@@ -98,21 +99,26 @@ class InboundService(
             id.toString(), no, req.orderId, req.supplierId, supplierName, req.warehouseId, req.remark, me.userId.toString(),
         )
         req.items.forEach { line ->
-            val name = jdbc.queryForObject(
-                "SELECT name FROM product WHERE id = ?::uuid", String::class.java, line.productId
+            val p = jdbc.queryForMap(
+                "SELECT name, unit, aux_unit, convert_rate FROM product WHERE id = ?::uuid",
+                line.productId,
             )
-            val unit = jdbc.queryForObject(
-                "SELECT unit FROM product WHERE id = ?::uuid", String::class.java, line.productId
+            // 录入单位 → 主单位（数量 × 换算率、单价 ÷ 换算率），库存成本仍按主单位计价
+            val u = UnitConversion.resolve(
+                line.qty, line.price, line.unit,
+                p["unit"]?.toString(), p["aux_unit"]?.toString(), bd(p["convert_rate"]),
             )
-            val amount = line.qty * line.price * (BigDecimal.ONE + line.taxRate)
-            totalQty += line.qty
+            val amount = u.qty * u.price * (BigDecimal.ONE + line.taxRate)
+            totalQty += u.qty
             totalAmount += amount
             jdbc.update(
                 """
-                INSERT INTO purchase_inbound_item(inbound_id, product_id, product_name, unit, qty, price, tax_rate, amount, batch_no, location)
-                VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO purchase_inbound_item(inbound_id, product_id, product_name, unit, qty, price,
+                                                  aux_unit, aux_qty, convert_rate, tax_rate, amount, batch_no, location)
+                VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                id.toString(), line.productId, name, unit, line.qty, line.price, line.taxRate,
+                id.toString(), line.productId, p["name"].toString(), u.unit, u.qty, u.price,
+                u.auxUnit, u.auxQty, u.convertRate, line.taxRate,
                 amount.setScale(2, RoundingMode.HALF_UP), line.batchNo, line.location,
             )
         }
@@ -169,6 +175,9 @@ class InboundService(
                     refType = "purchase",
                     refNo = no,
                     remark = "采购入库 $no",
+                    auxUnit = it["aux_unit"]?.toString(),
+                    auxQty = it["aux_qty"]?.let { v -> bd(v) },
+                    convertRate = it["convert_rate"]?.let { v -> bd(v) },
                 )
             )
         }

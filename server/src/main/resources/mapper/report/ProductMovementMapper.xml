@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.workeasy.erp.report.mapper.ProductMovementMapper">
+
+    <!-- Kotlin data class 不可变，用 constructor 映射（顺序必须与主构造参数一致） -->
+    <resultMap id="productMovementRow" type="com.workeasy.erp.report.mapper.ProductMovementRow">
+        <constructor>
+            <arg column="product_id" javaType="java.lang.String"/>
+            <arg column="product_name" javaType="java.lang.String"/>
+            <arg column="spec" javaType="java.lang.String"/>
+            <arg column="qty" javaType="java.math.BigDecimal"/>
+            <arg column="amount" javaType="java.math.BigDecimal"/>
+            <arg column="profit" javaType="java.math.BigDecimal"/>
+            <arg column="profit_rate" javaType="java.math.BigDecimal"/>
+        </constructor>
+    </resultMap>
+
+    <select id="topProducts" resultMap="productMovementRow">
+        SELECT i.product_id::text                    AS product_id,
+               i.product_name                        AS product_name,
+               MAX(i.spec)                           AS spec,
+               COALESCE(SUM(i.qty), 0)               AS qty,
+               COALESCE(SUM(i.net_amount), 0)        AS amount,
+               COALESCE(SUM(i.profit), 0)            AS profit,
+               CASE WHEN COALESCE(SUM(i.net_amount), 0) = 0 THEN 0
+                    ELSE COALESCE(SUM(i.profit), 0) / SUM(i.net_amount) END AS profit_rate
+        FROM sales_order_item i
+        JOIN sales_order o ON o.id = i.order_id
+        WHERE o.deleted_at IS NULL
+          AND o.status IN ('approved', 'shipped', 'partial', 'closed')
+          AND o.order_date &gt;= #{from}
+          AND o.order_date &lt;= #{to}
+        GROUP BY i.product_id, i.product_name
+        ORDER BY amount DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

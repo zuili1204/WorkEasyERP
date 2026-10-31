@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.workeasy.erp.report.mapper.ReportMapper">
+
+    <!-- 有效销售单据口径：与商品动销报表保持一致，草稿/审批中/作废不计入 -->
+    <!-- Kotlin data class 不可变，统一用 constructor 映射（顺序必须与主构造参数一致） -->
+
+    <resultMap id="inventoryTurnoverRow" type="com.workeasy.erp.report.mapper.InventoryTurnoverRow">
+        <constructor>
+            <arg column="product_id" javaType="java.lang.String"/>
+            <arg column="sku" javaType="java.lang.String"/>
+            <arg column="product_name" javaType="java.lang.String"/>
+            <arg column="unit" javaType="java.lang.String"/>
+            <arg column="out_qty" javaType="java.math.BigDecimal"/>
+            <arg column="out_cost" javaType="java.math.BigDecimal"/>
+            <arg column="stock_qty" javaType="java.math.BigDecimal"/>
+            <arg column="stock_amount" javaType="java.math.BigDecimal"/>
+            <arg column="avg_stock_amount" javaType="java.math.BigDecimal"/>
+            <arg column="turnover_rate" javaType="java.math.BigDecimal"/>
+            <arg column="turnover_days" javaType="java.math.BigDecimal"/>
+        </constructor>
+    </resultMap>
+
+    <select id="inventoryTurnover" resultMap="inventoryTurnoverRow">
+        WITH outbound AS (
+            SELECT t.product_id,
+                   SUM(-t.qty)   AS out_qty,
+                   SUM(t.amount) AS out_cost
+            FROM inventory_txn t
+            WHERE t.txn_type = 'out'
+              AND t.product_id IS NOT NULL
+              AND t.created_at::date &gt;= #{from}
+              AND t.created_at::date &lt;= #{to}
+            GROUP BY t.product_id
+        ),
+        inbound AS (
+            SELECT t.product_id, SUM(t.amount) AS in_cost
+            FROM inventory_txn t
+            WHERE t.txn_type = 'in'
+              AND t.product_id IS NOT NULL
+              AND t.created_at::date &gt;= #{from}
+              AND t.created_at::date &lt;= #{to}
+            GROUP BY t.product_id
+        ),
+        stock AS (
+            SELECT i.product_id,
+                   SUM(i.qty)              AS stock_qty,
+                   SUM(i.qty * i.avg_cost) AS stock_amount
+            FROM inventory i
+            GROUP BY i.product_id
+        )
+        SELECT product_id, sku, product_name, unit, out_qty, out_cost, stock_qty, stock_amount, avg_stock_amount,
+               CASE WHEN avg_stock_amount &lt;= 0 THEN 0
+                    ELSE ROUND(out_cost / avg_stock_amount, 2) END AS turnover_rate,
+               CASE WHEN avg_stock_amount &lt;= 0 OR out_cost = 0 THEN NULL
+                    ELSE ROUND(CAST(#{days} AS numeric) / (out_cost / avg_stock_amount), 1) END AS turnover_days
+        FROM (
+            SELECT p.id::text AS product_id, p.sku, p.name AS product_name, p.unit,
+                   ROUND(COALESCE(o.out_qty, 0), 3) AS out_qty,
+                   ROUND(COALESCE(o.out_cost, 0), 2) AS out_cost,
+                   ROUND(COALESCE(s.stock_qty, 0), 3) AS stock_qty,
+                   ROUND(COALESCE(s.stock_amount, 0), 2) AS stock_amount,
+                   ROUND(COALESCE(s.stock_amount, 0)
+                         + (COALESCE(o.out_cost, 0) - COALESCE(i.in_cost, 0)) / 2, 2) AS avg_stock_amount
+            FROM product p
+            LEFT JOIN outbound o ON o.product_id = p.id
+            LEFT JOIN inbound i ON i.product_id = p.id
+            LEFT JOIN stock s ON s.product_id = p.id
+            WHERE p.deleted_at IS NULL
+              AND (COALESCE(s.stock_qty, 0) &gt; 0 OR COALESCE(o.out_qty, 0) &gt; 0)
+        ) base
+        ORDER BY out_cost DESC, stock_amount DESC
+        LIMIT #{limit}
+    </select>
+
+    <resultMap id="slowMovingRow" type="com.workeasy.erp.report.mapper.SlowMovingRow">
+        <constructor>
+            <arg column="product_id" javaType="java.lang.String"/>
+            <arg column="sku" javaType="java.lang.String"/>
+            <arg column="product_name" javaType="java.lang.String"/>
+            <arg column="unit" javaType="java.lang.String"/>
+            <arg column="stock_qty" javaType="java.math.BigDecimal"/>
+            <arg column="stock_amount" javaType="java.math.BigDecimal"/>
+            <arg column="sales_qty" javaType="java.math.BigDecimal"/>
+            <arg column="last_out_date" javaType="java.time.LocalDate"/>
+            <arg column="stagnant_days" javaType="java.lang.Integer"/>
+        </constructor>
+    </resultMap>
+
+    <select id="slowMoving" resultMap="slowMovingRow">
+        WITH stock AS (
+            SELECT i.product_id,
+                   SUM(i.qty)              AS stock_qty,
+                   SUM(i.qty * i.avg_cost) AS stock_amount
+            FROM inventory i
+            GROUP BY i.product_id
+        ),
+        sales AS (
+            SELECT i.product_id, SUM(i.qty) AS sales_qty
+            FROM sales_order_item i
+            JOIN sales_order o ON o.id = i.order_id
+            WHERE o.deleted_at IS NULL
+              AND o.status IN ('approved', 'shipped', 'partial', 'closed')
+              AND o.order_date &gt;= #{from}
+              AND o.order_date &lt;= #{to}
+            GROUP BY i.product_id
+        ),
+        last_out AS (
+            SELECT t.product_id, MAX(t.created_at)::date AS last_out_date
+            FROM inventory_txn t
+            WHERE t.txn_type = 'out' AND t.ref_type = 'sales'
+            GROUP BY t.product_id
+        )
+        SELECT p.id::text AS product_id, p.sku, p.name AS product_name, p.unit,
+               ROUND(s.stock_qty, 3) AS stock_qty,
+               ROUND(s.stock_amount, 2) AS stock_amount,
+               ROUND(COALESCE(sa.sales_qty, 0), 3) AS sales_qty,
+               lo.last_out_date,
+               CASE WHEN lo.last_out_date IS NULL THEN NULL
+                    ELSE (CURRENT_DATE - lo.last_out_date)::int END AS stagnant_days
+        FROM product p
+        JOIN stock s ON s.product_id = p.id
+        LEFT JOIN sales sa ON sa.product_id = p.id
+        LEFT JOIN last_out lo ON lo.product_id = p.id
+        WHERE p.deleted_at IS NULL AND s.stock_qty &gt; 0
+        ORDER BY COALESCE(sa.sales_qty, 0) ASC, s.stock_amount DESC
+        LIMIT #{limit}
+    </select>
+
+    <resultMap id="customerContributionRow" type="com.workeasy.erp.report.mapper.CustomerContributionRow">
+        <constructor>
+            <arg column="customer_id" javaType="java.lang.String"/>
+            <arg column="customer_code" javaType="java.lang.String"/>
+            <arg column="customer_name" javaType="java.lang.String"/>
+            <arg column="level" javaType="java.lang.String"/>
+            <!-- Kotlin 非空 Int 编译为基本类型 int，构造参数必须用 _int（Integer 会 NoSuchMethod） -->
+            <arg column="order_count" javaType="_int"/>
+            <arg column="total_qty" javaType="java.math.BigDecimal"/>
+            <arg column="total_net" javaType="java.math.BigDecimal"/>
+            <arg column="total_amount" javaType="java.math.BigDecimal"/>
+            <arg column="total_profit" javaType="java.math.BigDecimal"/>
+            <arg column="profit_rate" javaType="java.math.BigDecimal"/>
+            <arg column="ar_balance" javaType="java.math.BigDecimal"/>
+            <arg column="overdue_amount" javaType="java.math.BigDecimal"/>
+            <arg column="last_order_date" javaType="java.time.LocalDate"/>
+        </constructor>
+    </resultMap>
+
+    <select id="customerContribution" resultMap="customerContributionRow">
+        WITH sales AS (
+            SELECT o.customer_id,
+                   COUNT(*)::int             AS order_count,
+                   SUM(o.total_qty)          AS total_qty,
+                   SUM(o.total_net)          AS total_net,
+                   SUM(o.total_amount)       AS total_amount,
+                   SUM(o.total_profit)       AS total_profit,
+                   MAX(o.order_date)         AS last_order_date
+            FROM sales_order o
+            WHERE o.deleted_at IS NULL
+              AND o.status IN ('approved', 'shipped', 'partial', 'closed')
+              AND o.order_date &gt;= #{from}
+              AND o.order_date &lt;= #{to}
+            GROUP BY o.customer_id
+        ),
+        ar AS (
+            SELECT l.customer_id,
+                   SUM(l.remain_amount) AS ar_balance,
+                   SUM(CASE WHEN l.status &lt;&gt; 'closed'
+                             AND l.due_date IS NOT NULL
+                             AND l.due_date &lt; CURRENT_DATE
+                            THEN l.remain_amount ELSE 0 END) AS overdue_amount
+            FROM ar_ledger l
+            GROUP BY l.customer_id
+        )
+        SELECT c.id::text AS customer_id, c.code AS customer_code, c.name AS customer_name, c.level,
+               s.order_count,
+               ROUND(s.total_qty, 3) AS total_qty,
+               ROUND(s.total_net, 2) AS total_net,
+               ROUND(s.total_amount, 2) AS total_amount,
+               ROUND(s.total_profit, 2) AS total_profit,
+               CASE WHEN s.total_net = 0 THEN 0
+                    ELSE ROUND(s.total_profit / s.total_net, 4) END AS profit_rate,
+               ROUND(COALESCE(a.ar_balance, 0), 2) AS ar_balance,
+               ROUND(COALESCE(a.overdue_amount, 0), 2) AS overdue_amount,
+               s.last_order_date
+        FROM sales s
+        JOIN customer c ON c.id = s.customer_id
+        LEFT JOIN ar a ON a.customer_id = c.id
+        WHERE c.deleted_at IS NULL
+        ORDER BY s.total_amount DESC, s.total_profit DESC
+        LIMIT #{limit}
+    </select>
+
+    <resultMap id="salesProfitRow" type="com.workeasy.erp.report.mapper.SalesProfitRow">
+        <constructor>
+            <arg column="owner_id" javaType="java.lang.String"/>
+            <arg column="owner_name" javaType="java.lang.String"/>
+            <!-- Kotlin 非空 Int 编译为基本类型 int，构造参数必须用 _int（Integer 会 NoSuchMethod） -->
+            <arg column="order_count" javaType="_int"/>
+            <arg column="total_net" javaType="java.math.BigDecimal"/>
+            <arg column="total_cost" javaType="java.math.BigDecimal"/>
+            <arg column="total_profit" javaType="java.math.BigDecimal"/>
+            <arg column="profit_rate" javaType="java.math.BigDecimal"/>
+        </constructor>
+    </resultMap>
+
+    <select id="salesProfit" resultMap="salesProfitRow">
+        SELECT e.id::text AS owner_id,
+               COALESCE(e.real_name, '未分配') AS owner_name,
+               COUNT(*)::int AS order_count,
+               ROUND(SUM(o.total_net), 2) AS total_net,
+               ROUND(SUM(o.total_cost), 2) AS total_cost,
+               ROUND(SUM(o.total_profit), 2) AS total_profit,
+               CASE WHEN SUM(o.total_net) = 0 THEN 0
+                    ELSE ROUND(SUM(o.total_profit) / SUM(o.total_net), 4) END AS profit_rate
+        FROM sales_order o
+        LEFT JOIN employee e ON e.id = o.owner_id
+        WHERE o.deleted_at IS NULL
+          AND o.status IN ('approved', 'shipped', 'partial', 'closed')
+          AND o.order_date &gt;= #{from}
+          AND o.order_date &lt;= #{to}
+        GROUP BY e.id, e.real_name
+        ORDER BY total_profit DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

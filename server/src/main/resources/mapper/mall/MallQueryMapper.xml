@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.workeasy.erp.mall.mapper.MallQueryMapper">
+
+    <sql id="productFilter">
+        <where>
+            p.deleted_at IS NULL
+            AND p.status = 'active'
+            AND p.online_status = 'online'
+            <if test="q != null">
+                AND (p.name ILIKE '%' || #{q} || '%' OR p.sku ILIKE '%' || #{q} || '%'
+                     OR COALESCE(p.online_title, '') ILIKE '%' || #{q} || '%')
+            </if>
+            <if test="categoryId != null">
+                AND p.category_id = #{categoryId}::uuid
+            </if>
+        </where>
+    </sql>
+
+    <select id="onlineProducts" resultType="map">
+        SELECT p.id::text AS "productId", p.sku, p.name,
+               COALESCE(p.online_title, p.name) AS "onlineTitle",
+               p.spec, p.brand, p.unit, p.aux_unit AS "auxUnit", p.convert_rate AS "convertRate",
+               p.sale_price AS "salePrice", p.min_order_qty AS "minOrderQty", p.step_qty AS "stepQty",
+               p.category_id::text AS "categoryId", c.name AS "categoryName",
+               (SELECT pi.url FROM product_image pi
+                WHERE pi.product_id = p.id
+                ORDER BY pi.is_primary DESC, pi.sort_no, pi.created_at LIMIT 1) AS "imageUrl"
+        FROM product p
+        LEFT JOIN product_category c ON c.id = p.category_id
+        <include refid="productFilter"/>
+        ORDER BY p.updated_at DESC, p.sku
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countOnlineProducts" resultType="long">
+        SELECT count(*) FROM product p
+        <include refid="productFilter"/>
+    </select>
+
+    <select id="cartItems" resultType="map">
+        SELECT c.id::text AS "id", c.qty, c.created_at AS "createdAt",
+               p.id::text AS "productId", p.sku, p.name,
+               COALESCE(p.online_title, p.name) AS "onlineTitle",
+               p.spec, p.unit, p.aux_unit AS "auxUnit", p.convert_rate AS "convertRate",
+               p.sale_price AS "salePrice", p.min_order_qty AS "minOrderQty", p.step_qty AS "stepQty",
+               p.online_status AS "onlineStatus",
+               (SELECT pi.url FROM product_image pi
+                WHERE pi.product_id = p.id
+                ORDER BY pi.is_primary DESC, pi.sort_no, pi.created_at LIMIT 1) AS "imageUrl"
+        FROM mall_cart_item c
+        JOIN product p ON p.id = c.product_id AND p.deleted_at IS NULL
+        WHERE c.member_id = #{memberId}::uuid
+        ORDER BY c.updated_at DESC
+    </select>
+
+    <select id="orderList" resultType="map">
+        SELECT o.id::text AS "id", o.order_no AS "orderNo", o.status, o.pay_type AS "payType",
+               o.total_qty AS "totalQty", o.total_amount AS "totalAmount",
+               o.sales_order_id::text AS "salesOrderId", o.out_trade_no AS "outTradeNo",
+               o.paid_at AS "paidAt", o.shipped_at AS "shippedAt", o.created_at AS "createdAt",
+               (SELECT count(*) FROM mall_order_item i WHERE i.order_id = o.id) AS "itemCount",
+               (SELECT string_agg(i.product_name, '、') FROM mall_order_item i WHERE i.order_id = o.id)
+                   AS "summary"
+        FROM mall_order o
+        <where>
+            o.member_id = #{memberId}::uuid
+            <if test="status != null">
+                AND o.status = #{status}
+            </if>
+        </where>
+        ORDER BY o.created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countOrders" resultType="long">
+        SELECT count(*) FROM mall_order o
+        <where>
+            o.member_id = #{memberId}::uuid
+            <if test="status != null">
+                AND o.status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <select id="arLedger" resultType="map">
+        SELECT l.id::text AS "id", l.biz_type AS "bizType", l.biz_no AS "bizNo",
+               l.amount, l.settled_amount AS "settledAmount", l.remain_amount AS "remainAmount",
+               l.due_date AS "dueDate", l.status,
+               CASE WHEN l.remain_amount &lt;= 0 THEN 0
+                    WHEN l.due_date IS NULL OR l.due_date &gt;= CURRENT_DATE THEN 0
+                    ELSE (CURRENT_DATE - l.due_date) END AS "overdueDays",
+               l.created_at AS "createdAt"
+        FROM ar_ledger l
+        WHERE l.customer_id = #{customerId}::uuid AND l.status &lt;&gt; 'closed'
+        ORDER BY l.created_at DESC
+    </select>
+</mapper>
