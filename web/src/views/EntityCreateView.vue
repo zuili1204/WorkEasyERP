@@ -218,7 +218,7 @@ onMounted(async () => {
                     </option>
                   </select>
                   <input
-                    v-else
+                    v-else-if="c.type === 'number'"
                     v-model.number="l[c.name]"
                     type="number"
                     class="input sm"
@@ -226,6 +226,13 @@ onMounted(async () => {
                     :step="c.step"
                     :disabled="c.disabled"
                     :title="c.disabled ? '由系统按加权成本自动计价' : undefined"
+                  />
+                  <input
+                    v-else
+                    v-model="l[c.name]"
+                    type="text"
+                    class="input sm"
+                    :disabled="c.disabled"
                   />
                 </td>
                 <td>

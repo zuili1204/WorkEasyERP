@@ -111,25 +111,33 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 <style scoped>
 .mask {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px);
+  position: fixed; inset: 0; background: rgba(13, 18, 19, .58); backdrop-filter: blur(2px);
   display: flex; align-items: flex-start; justify-content: center;
   z-index: var(--z-mask); padding: 60px 20px;
 }
 .modal {
-  background: #fff; border-radius: var(--radius-lg); max-width: 100%;
+  position: relative; background: #fff; border: 1px solid var(--border);
+  border-radius: var(--radius-lg); max-width: 100%;
   box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
   max-height: calc(100vh - 120px);
 }
+/* 顶部铜色刻线：弹窗也有统一的品牌记号 */
+.modal::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--copper-soft) 45%, transparent);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0; pointer-events: none;
+}
 .modal-head {
-  padding: 18px 24px; border-bottom: 1px solid var(--border-2);
+  padding: 16px 22px; border-bottom: 1px solid var(--border-2); background: #FCFBF7;
   display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
 }
-.modal-head h3 { margin: 0; font-size: var(--fs-lg); font-weight: 800; display: flex; align-items: center; gap: 9px; }
-.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: 8px; }
+.modal-head h3 { margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 9px; letter-spacing: .01em; }
+.modal-head h3 svg { color: var(--copper); }
+.modal-head .x { cursor: pointer; color: var(--text-3); display: flex; padding: 5px; border-radius: var(--radius-xs); }
 .modal-head .x:hover { background: var(--danger-light); color: var(--danger); }
-.modal-body { padding: var(--sp-6); overflow: auto; flex: 1; }
+.modal-body { padding: 22px; overflow: auto; flex: 1; }
 .modal-foot {
-  padding: 15px 24px; border-top: 1px solid var(--border-2);
+  padding: 14px 22px; border-top: 1px solid var(--border-2); background: #FCFBF7;
   display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0;
 }
 @media (max-width: 900px) {

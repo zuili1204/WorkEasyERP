@@ -15,7 +15,7 @@ const META: Record<string, { title: string; icon: string; cols: Array<[string, s
   product: {
     title: '商品 / SKU',
     icon: 'package',
-    cols: [['sku', 'SKU'], ['name', '名称'], ['spec', '规格'], ['unit', '单位'], ['sale_price', '售价'], ['tax_rate', '税率']],
+    cols: [['sku', 'SKU'], ['name', '名称'], ['spec', '规格'], ['unit', '单位'], ['aux_unit', '辅助单位'], ['convert_rate', '换算率'], ['sale_price', '售价'], ['tax_rate', '税率'], ['online_status', '上架']],
   },
   supplier: {
     title: '供应商',
@@ -123,7 +123,7 @@ onMounted(async () => {
           </template>
 
           <tr v-for="(r, i) in data.list" :key="i">
-            <td v-for="c in meta.cols" :key="c[0]">{{ r[c[0]] ?? '—' }}</td>
+            <td v-for="c in meta.cols" :key="c[0]">{{ c[0] === 'online_status' ? (r[c[0]] === 'online' ? '已上架' : '未上架') : (r[c[0]] ?? '—') }}</td>
           </tr>
         </TableShell>
       </div>

@@ -102,14 +102,15 @@ function stats(): Record<string, unknown> {
 <style scoped>
 .hero {
   display: flex; align-items: center; gap: 18px; padding: 22px 24px; margin-bottom: 16px;
-  background: linear-gradient(135deg, #EEF2FF, #FFFFFF);
-  border: 1px solid var(--border); border-radius: var(--radius);
+  background: linear-gradient(135deg, #F7ECE3, #FFFFFF 62%);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
 .ava {
-  width: 64px; height: 64px; border-radius: 16px; background: var(--primary); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 26px;
+  width: 60px; height: 60px; border-radius: var(--radius-sm); background: var(--primary); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 24px;
+  box-shadow: inset 0 0 0 1px rgba(19, 26, 25, .15);
 }
-.hero h2 { margin: 0 0 6px; font-size: 21px; font-weight: 800; }
+.hero h2 { margin: 0 0 6px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .hero p { margin: 0; color: var(--text-2); font-size: 13.5px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 .kv { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border-2); font-size: 13.5px; }
@@ -121,6 +122,6 @@ function stats(): Record<string, unknown> {
   padding: 14px; text-align: center; cursor: pointer; transition: .15s var(--ease);
 }
 .mini:hover { border-color: var(--primary); background: var(--primary-light); }
-.mini .n { font-size: 22px; font-weight: 800; color: var(--primary); }
+.mini .n { font-family: var(--font-mono); font-size: 21px; font-weight: 700; color: var(--primary); }
 .mini .l { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 </style>

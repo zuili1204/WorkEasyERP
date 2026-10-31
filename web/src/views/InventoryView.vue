@@ -128,6 +128,7 @@ onMounted(load)
             <th>类型</th>
             <th>商品</th>
             <th>数量</th>
+            <th>录入</th>
             <th>单价</th>
             <th>金额</th>
             <th>结存</th>
@@ -157,6 +158,7 @@ onMounted(load)
             <td :style="Number(r.qty) < 0 ? 'color: var(--danger)' : 'color: var(--accent)'">
               {{ num(r.qty, 3) }}
             </td>
+            <td>{{ r.aux_qty != null ? num(r.aux_qty, 3) + ' ' + (r.aux_unit || '') : '—' }}</td>
             <td>{{ num(r.price, 4) }}</td>
             <td>{{ num(r.amount) }}</td>
             <td>{{ num(r.balance_qty, 3) }}</td>

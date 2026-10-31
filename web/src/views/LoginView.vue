@@ -13,12 +13,12 @@ const error = ref('')
 
 /** 演示账号（与原型、数据库文档 §16.2 一致，密码统一 123456） */
 const ACCOUNTS = [
-  { user: 'boss@we', name: '张总', role: '老板 / 总经理', color: '#4F46E5' },
-  { user: 'mgr@we', name: '李经理', role: '销售部 主管', color: '#0EA5E9' },
-  { user: 'fin@we', name: '赵财务', role: '财务部 会计', color: '#16A34A' },
-  { user: 'sal@we', name: '王销售', role: '销售部 客户经理', color: '#F59E0B' },
-  { user: 'hr@we', name: '陈人事', role: '人事行政部', color: '#EC4899' },
-  { user: 'emp@we', name: '小林', role: '销售部 专员', color: '#64748B' },
+  { user: 'boss@we', name: '张总', role: '老板 / 总经理', color: '#B85C2E' },
+  { user: 'mgr@we', name: '李经理', role: '销售部 主管', color: '#3A6772' },
+  { user: 'fin@we', name: '赵财务', role: '财务部 会计', color: '#3F7A58' },
+  { user: 'sal@we', name: '王销售', role: '销售部 客户经理', color: '#B8842A' },
+  { user: 'hr@we', name: '陈人事', role: '人事行政部', color: '#8C5A6E' },
+  { user: 'emp@we', name: '小林', role: '销售部 专员', color: '#6C7674' },
 ]
 
 async function doLogin() {
@@ -51,16 +51,21 @@ function pick(a: (typeof ACCOUNTS)[number]) {
   <div class="login-wrap">
     <div class="login-brand">
       <div class="lg"><div class="logo">W</div>WorkEasyERP</div>
-      <h2>企业资源计划<br />人 · 财 · 物 · 事 一体化</h2>
+      <h2>企业资源计划<br /><span>人 · 财 · 物 · 事</span> 一体化</h2>
       <p>一个系统打通组织、审批、进销存与财务，让老板看全局、员工高效办事。</p>
       <ul>
-        <li><Icon name="check-circle" :size="16" /> 角色即视图：菜单与数据范围天然不同</li>
-        <li><Icon name="check-circle" :size="16" /> 流程驱动：提交 → 审批 → 执行 → 归档</li>
-        <li><Icon name="check-circle" :size="16" /> 单据联动：订单 → 出库 → 应收 → 核销</li>
+        <li><Icon name="check-circle" :size="15" /> 角色即视图：菜单与数据范围天然不同</li>
+        <li><Icon name="check-circle" :size="15" /> 流程驱动：提交 → 审批 → 执行 → 归档</li>
+        <li><Icon name="check-circle" :size="15" /> 单据联动：订单 → 出库 → 应收 → 核销</li>
       </ul>
+      <div class="brand-foot">
+        <span>WORK EASY ERP</span><span>V2 · MULTI-TENANT</span><span>40+ MODULES</span>
+      </div>
     </div>
 
     <div class="login-form">
+      <div class="form-inner">
+      <div class="kicker">CONSOLE / 控制台</div>
       <h3>登录到控制台</h3>
       <div class="sub">点击角色卡片直接登录，演示密码均为 <b>123456</b>。</div>
 
@@ -88,48 +93,112 @@ function pick(a: (typeof ACCOUNTS)[number]) {
       <button class="btn btn-primary submit" :disabled="loading" @click="doLogin">
         {{ loading ? '登录中…' : '登录' }}
       </button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.login-wrap { display: grid; grid-template-columns: 1.05fr .95fr; min-height: 100vh; }
+.login-wrap {
+  display: grid; grid-template-columns: 1.05fr .95fr; min-height: 100vh;
+  background: var(--paper);
+}
+/* 左：墨青图纸面板 —— 网格、铜色辉光、规格脚注 */
 .login-brand {
-  background: linear-gradient(160deg, #1E1B4B, #312E81 45%, #4F46E5);
-  color: #fff; padding: 56px 60px; display: flex; flex-direction: column; justify-content: center;
+  position: relative; overflow: hidden;
+  background: #0D1213; color: #F2F0E9;
+  padding: 56px 62px; display: flex; flex-direction: column; justify-content: center;
+  border-right: 1px solid #1C2526;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px),
+    radial-gradient(120% 90% at 0% 0%, rgba(184, 92, 46, .26), transparent 58%);
+  background-size: 34px 34px, 34px 34px, 100% 100%;
 }
-.lg { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 19px; letter-spacing: .3px; }
+.login-brand::after {
+  content: ''; position: absolute; right: 28px; top: 28px; width: 54px; height: 54px;
+  border-top: 1px solid rgba(184, 92, 46, .55); border-right: 1px solid rgba(184, 92, 46, .55);
+}
+.lg {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-mono); font-size: 17px; font-weight: 600; letter-spacing: .06em;
+}
 .logo {
-  width: 38px; height: 38px; border-radius: 11px; background: rgba(255, 255, 255, .16);
-  display: flex; align-items: center; justify-content: center; font-weight: 800;
+  width: 36px; height: 36px; border-radius: var(--radius-sm);
+  background: linear-gradient(150deg, #D98B5F, #B85C2E 60%, #9C4A20);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 18px; font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
 }
-.login-brand h2 { font-size: 30px; font-weight: 800; line-height: 1.45; margin: 36px 0 14px; }
-.login-brand p { color: rgba(255, 255, 255, .78); line-height: 1.8; margin: 0 0 26px; font-size: 14px; }
-.login-brand ul { list-style: none; padding: 0; margin: 0; color: rgba(255, 255, 255, .9); }
-.login-brand li { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; font-size: 13.5px; }
+.login-brand h2 {
+  font-size: 31px; font-weight: 700; line-height: 1.42; margin: 40px 0 16px;
+  letter-spacing: -.01em;
+}
+.login-brand h2 span { color: var(--copper-soft); }
+.login-brand p { color: #A9B4B1; line-height: 1.85; margin: 0 0 28px; font-size: 13.5px; max-width: 420px; }
+.login-brand ul { list-style: none; padding: 0; margin: 0; }
+.login-brand li {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 12px; font-size: 13px;
+  color: #C8D0CD; padding-left: 12px; position: relative;
+}
+.login-brand li::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 3px; background: var(--copper);
+}
+.login-brand li svg { color: var(--copper-soft); flex-shrink: 0; }
+.brand-foot {
+  display: flex; flex-wrap: wrap; gap: 18px; margin-top: 44px; padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; color: #6F7C79;
+}
 
-.login-form { padding: 48px 44px; display: flex; flex-direction: column; justify-content: center; background: #fff; }
-.login-form h3 { margin: 0 0 4px; font-size: 19px; font-weight: 800; }
-.sub { color: var(--text-3); font-size: 13px; margin-bottom: 18px; }
-.account-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 18px; }
+/* 右：纸白表单区 */
+.login-form {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 48px 44px; background: var(--paper);
+}
+.form-inner { width: 100%; max-width: 440px; margin: 0 auto; }
+.login-form h3 { margin: 8px 0 4px; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+.sub { color: var(--text-3); font-size: 12.5px; margin-bottom: 20px; }
+.sub b { color: var(--text); font-family: var(--font-mono); font-weight: 700; }
+.account-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; }
 .account-card {
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+  border: 1px solid var(--border); border-left: 2px solid transparent;
   border-radius: var(--radius-sm); cursor: pointer; transition: .15s var(--ease); background: #fff;
 }
-.account-card:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
-.ava { width: 34px; height: 34px; border-radius: 9px; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
-.account-card .nm { font-weight: 700; font-size: 13.5px; }
-.account-card .rl { font-size: 11.5px; color: var(--text-3); }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; }
-.err {
-  background: var(--danger-light); color: #B91C1C; padding: 9px 12px; border-radius: var(--radius-sm);
-  font-size: 13px; margin-bottom: 12px;
+.account-card:hover {
+  border-color: var(--border); border-left-color: var(--primary);
+  background: #FCFBF7; box-shadow: var(--shadow-xs);
 }
-.submit { width: 100%; justify-content: center; padding: 11px; }
+.ava {
+  width: 30px; height: 30px; border-radius: var(--radius-xs); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12.5px; flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14);
+}
+.account-card .nm { font-weight: 700; font-size: 13px; line-height: 1.3; }
+.account-card .rl { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+.field { margin-bottom: 14px; }
+.field label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-2); margin-bottom: 6px; font-weight: 600; letter-spacing: .03em;
+}
+.field label::before { content: ''; width: 2px; height: 10px; background: var(--copper); opacity: .55; }
+.err {
+  background: var(--danger-light); color: #953027; border: 1px solid #EBCBC5;
+  padding: 8px 11px; border-radius: var(--radius-sm);
+  font-size: 12.5px; margin-bottom: 12px;
+}
+.submit {
+  width: 100%; justify-content: center; padding: 11px;
+  letter-spacing: .12em; font-size: 13.5px;
+}
+.login-form .kicker { margin-bottom: 2px; color: var(--copper); }
 
 @media (max-width: 900px) {
   .login-wrap { grid-template-columns: 1fr; }
   .login-brand { display: none; }
+  .login-form { padding: 32px 22px; }
 }
 </style>

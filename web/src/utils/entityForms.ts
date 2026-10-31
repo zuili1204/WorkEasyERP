@@ -52,7 +52,7 @@ export interface LineSchema {
   fields: Array<{
     name: string
     label: string
-    type: 'select' | 'number'
+    type: 'select' | 'number' | 'text'
     width?: string
     min?: number
     step?: number
@@ -142,10 +142,16 @@ export async function loadOptions(froms: OptionsFrom[] | undefined): Promise<Opt
     },
     products: async () => {
       const r = await api.baseList('product', undefined, 1, 100)
-      return (r.list ?? []).map((x) => ({
-        value: String(x.id),
-        label: `${x.sku ?? ''} · ${x.name ?? x.id}`.trim(),
-      }))
+      return (r.list ?? []).map((x) => {
+        const unit = String(x.unit ?? '').trim()
+        const aux = String(x.aux_unit ?? '').trim()
+        const rate = x.convert_rate != null && Number(x.convert_rate) > 0 ? `×${x.convert_rate}` : ''
+        const suffix = aux ? `（${unit}/${aux}${rate}）` : (unit ? `（${unit}）` : '')
+        return {
+          value: String(x.id),
+          label: `${x.sku ?? ''} · ${x.name ?? x.id}${suffix}`.trim(),
+        }
+      })
     },
     warehouses: async () => {
       const r = await api.baseList('warehouse', undefined, 1, 100)
@@ -267,6 +273,14 @@ const PRODUCT_LINE: LineSchema['fields'] = [
   { name: 'price', label: '单价', type: 'number', width: '108px', min: 0, step: 0.01 },
 ]
 
+/** 多单位录入的行：单位留空=主单位，填辅助单位时由服务端按换算率折算主单位数量 */
+const PRODUCT_LINE_UNIT: LineSchema['fields'] = [
+  { name: 'productId', label: '商品', type: 'select', optionsFrom: 'products' },
+  { name: 'qty', label: '数量', type: 'number', width: '80px', min: 0.001, step: 1 },
+  { name: 'unit', label: '录入单位', type: 'text', width: '84px' },
+  { name: 'price', label: '单价', type: 'number', width: '104px', min: 0, step: 0.01 },
+]
+
 function sumLine(rows: Array<Record<string, unknown>>, withTax: boolean) {
   const net = rows.reduce((s, l) => s + Number(l.qty || 0) * Number(l.price || 0), 0)
   const tax = withTax
@@ -282,6 +296,7 @@ function taxLine(
   return {
     productId: opts.products[0]?.value ?? '',
     qty: 1,
+    unit: '',
     price: 0,
     taxRate: 0.13,
     ...extra,
@@ -361,7 +376,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
     back: '/orders/purchase',
     refs: ['suppliers', 'products', 'warehouses'],
     successText: '采购订单已创建',
-    tip: '提交后可在列表发起审批。',
+    tip: '提交后可在列表发起审批。明细行「录入单位」留空按主单位，填辅助单位自动换算为主单位数量。',
     fields: [
       { name: 'partyId', label: '供应商', type: 'select', optionsFrom: 'suppliers', required: true },
       { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses' },
@@ -371,7 +386,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
     lines: {
       title: '明细行',
       addLabel: '增行',
-      fields: [...PRODUCT_LINE, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
+      fields: [...PRODUCT_LINE_UNIT, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
       makeRow: (o) => taxLine(o, { qty: 10, price: 10 }),
       toItems: (rows) => rows.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
@@ -388,6 +403,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
       remark: (v.remark as string) || undefined,
       items: (v.__items as Array<Record<string, unknown>>)?.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
+        unit: String(l.unit ?? '').trim() || undefined,
       })) ?? [],
     }),
   },
@@ -398,17 +414,17 @@ export const ENTITY_FORMS: EntitySchema[] = [
     back: '/orders/sales',
     refs: ['customers', 'products', 'warehouses'],
     successText: '销售订单已创建',
-    tip: '销售订单会按当前加权成本冻结成本价，据此计算毛利。',
+    tip: '销售订单会按当前加权成本冻结成本价，据此计算毛利。明细行「录入单位」留空按主单位，填辅助单位自动换算。',
     fields: [
       { name: 'partyId', label: '客户', type: 'select', optionsFrom: 'customers', required: true },
-      { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses' },
+      { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses', required: true },
       { name: 'creditDays', label: '账期（天）', type: 'number', default: 30, step: 1, min: 0 },
       { name: 'remark', label: '备注', type: 'text' },
     ],
     lines: {
       title: '明细行',
       addLabel: '增行',
-      fields: [...PRODUCT_LINE, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
+      fields: [...PRODUCT_LINE_UNIT, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
       makeRow: (o) => taxLine(o, { qty: 10 }),
       toItems: (rows) => rows.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
@@ -425,6 +441,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
       remark: (v.remark as string) || undefined,
       items: (v.__items as Array<Record<string, unknown>>)?.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
+        unit: String(l.unit ?? '').trim() || undefined,
       })) ?? [],
     }),
   },
@@ -437,7 +454,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
     back: '/purchase/inbounds',
     refs: ['suppliers', 'products', 'warehouses'],
     successText: '入库单已创建，待审核',
-    tip: '审核时按移动加权更新库存成本并生成应付。',
+    tip: '审核时按移动加权更新库存成本并生成应付。明细行「录入单位」留空按主单位，填辅助单位自动换算。',
     fields: [
       { name: 'partyId', label: '供应商', type: 'select', optionsFrom: 'suppliers', required: true },
       { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses', required: true },
@@ -446,7 +463,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
     lines: {
       title: '明细行',
       addLabel: '增行',
-      fields: [...PRODUCT_LINE, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
+      fields: [...PRODUCT_LINE_UNIT, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
       makeRow: (o) => taxLine(o, { qty: 10 }),
       toItems: (rows) => rows.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
@@ -462,6 +479,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
       remark: (v.remark as string) || undefined,
       items: (v.__items as Array<Record<string, unknown>>)?.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
+        unit: String(l.unit ?? '').trim() || undefined,
       })) ?? [],
     }),
   },
@@ -472,7 +490,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
     back: '/sales/outbounds',
     refs: ['customers', 'products', 'warehouses'],
     successText: '出库单已创建，待审核',
-    tip: '审核时按加权成本扣减库存、校验授信并生成应收。',
+    tip: '审核时按加权成本扣减库存、校验授信并生成应收。明细行「录入单位」留空按主单位，填辅助单位自动换算。',
     fields: [
       { name: 'partyId', label: '客户', type: 'select', optionsFrom: 'customers', required: true },
       { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses', required: true },
@@ -481,7 +499,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
     lines: {
       title: '明细行',
       addLabel: '增行',
-      fields: [...PRODUCT_LINE, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
+      fields: [...PRODUCT_LINE_UNIT, { name: 'taxRate', label: '税率', type: 'number', width: '84px', step: 0.01, min: 0 }],
       makeRow: (o) => taxLine(o, { qty: 10 }),
       toItems: (rows) => rows.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
@@ -497,6 +515,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
       remark: (v.remark as string) || undefined,
       items: (v.__items as Array<Record<string, unknown>>)?.map((l) => ({
         productId: l.productId, qty: Number(l.qty), price: Number(l.price), taxRate: Number(l.taxRate),
+        unit: String(l.unit ?? '').trim() || undefined,
       })) ?? [],
     }),
   },
@@ -820,6 +839,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
       { name: 'productId', label: '商品', type: 'select', optionsFrom: 'products', required: true },
       { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses', required: true },
       num('qty', '数量', 1, { step: 1, min: 1 }),
+      { name: 'unit', label: '录入单位', type: 'text', placeholder: '留空=主单位；可填辅助单位' },
       num('price', '入库单价', 0, { step: 0.01, min: 0 }),
       { name: 'remark', label: '备注', type: 'text' },
     ],
@@ -827,6 +847,7 @@ export const ENTITY_FORMS: EntitySchema[] = [
       productId: String(v.productId),
       warehouseId: String(v.warehouseId),
       qty: Number(v.qty),
+      unit: (v.unit as string) || undefined,
       price: Number(v.price),
       remark: (v.remark as string) || undefined,
       refType: 'purchase',
@@ -843,12 +864,14 @@ export const ENTITY_FORMS: EntitySchema[] = [
       { name: 'productId', label: '商品', type: 'select', optionsFrom: 'products', required: true },
       { name: 'warehouseId', label: '仓库', type: 'select', optionsFrom: 'warehouses', required: true },
       num('qty', '数量', 1, { step: 1, min: 1 }),
+      { name: 'unit', label: '录入单位', type: 'text', placeholder: '留空=主单位；可填辅助单位' },
       { name: 'remark', label: '备注', type: 'text' },
     ],
     submit: (v) => api.outbound({
       productId: String(v.productId),
       warehouseId: String(v.warehouseId),
       qty: Number(v.qty),
+      unit: (v.unit as string) || undefined,
       price: undefined,
       remark: (v.remark as string) || undefined,
       refType: 'sales',
@@ -881,12 +904,15 @@ export const ENTITY_FORMS: EntitySchema[] = [
       { name: 'sku', label: 'SKU', type: 'text' },
       { name: 'name', label: '名称', type: 'text', required: true },
       { name: 'spec', label: '规格', type: 'text' },
-      { name: 'unit', label: '单位', type: 'text' },
+      { name: 'unit', label: '主单位', type: 'text' },
+      { name: 'auxUnit', label: '辅助单位', type: 'text', placeholder: '选填，如 箱' },
+      num('convertRate', '换算率(主/辅)', 1, { step: 0.0001, min: 0 }),
       num('salePrice', '售价'),
       num('taxRate', '税率'),
     ],
     submit: (v) => api.baseCreate('product', collect(v, [
       ['sku', 'text'], ['name', 'text'], ['spec', 'text'], ['unit', 'text'],
+      ['auxUnit', 'text'], ['convertRate', 'number'],
       ['salePrice', 'number'], ['taxRate', 'number'],
     ])),
   },

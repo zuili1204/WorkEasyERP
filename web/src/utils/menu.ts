@@ -107,6 +107,12 @@ export const MENU: MenuGroup[] = [
     ],
   },
   {
+    group: '订货商城',
+    items: [
+      { id: 'mall_admin', label: '商城后台', icon: 'shopping-cart', path: '/mall-admin', roles: ['boss', 'manager', 'finance', 'sales'] },
+    ],
+  },
+  {
     group: '报表与分析',
     items: [
       { id: 'report', label: '自定义报表', icon: 'bar-chart', path: '/reports', roles: ['boss', 'manager', 'finance'] },

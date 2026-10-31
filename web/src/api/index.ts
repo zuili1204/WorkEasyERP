@@ -444,4 +444,42 @@ export const api = {
     unwrap(http.post<ApiResp<Record<string, string | null>>>('/finance/invoices', body)),
   reconPurchase: () => unwrap(http.get<ApiResp<Record<string, string | null>[]>>('/finance/recon/purchase')),
   reconSales: () => unwrap(http.get<ApiResp<Record<string, string | null>[]>>('/finance/recon/sales')),
+
+  // ---------- 商城后台（mall-admin） ----------
+  mallOverview: () => unwrap(http.get<ApiResp<Record<string, unknown>>>('/mall-admin/overview')),
+  mallSettings: () => unwrap(http.get<ApiResp<Record<string, string | null>[]>>('/mall-admin/settings')),
+  saveMallSettings: (body: Record<string, string>) => unwrap(http.put<ApiResp<boolean>>('/mall-admin/settings', body)),
+  mallBanners: () => unwrap(http.get<ApiResp<Record<string, string | null>[]>>('/mall-admin/banners')),
+  createMallBanner: (body: Record<string, unknown>) =>
+    unwrap(http.post<ApiResp<Record<string, string | null>>>('/mall-admin/banners', body)),
+  updateMallBanner: (id: string, body: Record<string, unknown>) =>
+    unwrap(http.put<ApiResp<Record<string, string | null>>>(`/mall-admin/banners/${id}`, body)),
+  deleteMallBanner: (id: string) => unwrap(http.delete<ApiResp<boolean>>(`/mall-admin/banners/${id}`)),
+  mallInvites: () => unwrap(http.get<ApiResp<Record<string, string | null>[]>>('/mall-admin/invites')),
+  createMallInvite: (body: Record<string, unknown>) =>
+    unwrap(http.post<ApiResp<Record<string, string | null>>>('/mall-admin/invites', body)),
+  setMallInviteStatus: (id: string, status: string) =>
+    unwrap(http.patch<ApiResp<boolean>>(`/mall-admin/invites/${id}/status`, { status })),
+  mallBindings: (status?: string) =>
+    unwrap(http.get<ApiResp<Record<string, string | null>[]>>('/mall-admin/bindings', { params: { status } })),
+  approveMallBinding: (id: string, customerId?: string, remark?: string) =>
+    unwrap(http.post<ApiResp<Record<string, string | null>>>(`/mall-admin/bindings/${id}/approve`, { customerId, remark })),
+  rejectMallBinding: (id: string, remark?: string) =>
+    unwrap(http.post<ApiResp<boolean>>(`/mall-admin/bindings/${id}/reject`, { remark })),
+  mallOrders: (q: string | undefined, status: string | undefined, page: number, size: number) =>
+    unwrap(http.get<ApiResp<PageResult<Record<string, string | null>>>>('/mall-admin/orders', { params: { q, status, page, size } })),
+  mallOrderDetail: (id: string) => unwrap(http.get<ApiResp<Record<string, unknown>>>(`/mall-admin/orders/${id}`)),
+  closeMallOrder: (id: string, remark?: string) =>
+    unwrap(http.post<ApiResp<boolean>>(`/mall-admin/orders/${id}/close`, { remark })),
+  confirmMallCredit: (id: string) => unwrap(http.post<ApiResp<boolean>>(`/mall-admin/orders/${id}/confirm-credit`)),
+  confirmMallOffline: (id: string) =>
+    unwrap(http.post<ApiResp<Record<string, string | null>>>(`/mall-admin/orders/${id}/confirm-offline`)),
+  mallPayments: (q: string | undefined, status: string | undefined, page: number, size: number) =>
+    unwrap(http.get<ApiResp<PageResult<Record<string, string | null>>>>('/mall-admin/payments', { params: { q, status, page, size } })),
+  mallAfterSales: (status: string | undefined, page: number, size: number) =>
+    unwrap(http.get<ApiResp<PageResult<Record<string, string | null>>>>('/mall-admin/after-sales', { params: { status, page, size } })),
+  approveMallRefund: (id: string, remark?: string) =>
+    unwrap(http.post<ApiResp<Record<string, string | null>>>(`/mall-admin/after-sales/${id}/approve`, { remark })),
+  rejectMallRefund: (id: string, remark?: string) =>
+    unwrap(http.post<ApiResp<boolean>>(`/mall-admin/after-sales/${id}/reject`, { remark })),
 }

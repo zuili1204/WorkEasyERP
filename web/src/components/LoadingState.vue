@@ -20,14 +20,17 @@ withDefaults(defineProps<{ text?: string }>(), { text: '加载中…' })
   font-size: 13.5px;
 }
 .spinner {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 2px solid var(--border);
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 .txt {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: .08em;
   font-weight: 500;
 }
 @keyframes spin {

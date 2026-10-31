@@ -31,10 +31,15 @@ defineProps<{
 </template>
 
 <style scoped>
-.field { margin-bottom: 14px; }
+.field { margin-bottom: 15px; }
 .field label {
-  display: block; font-size: 12.5px; color: var(--text-2);
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-2); letter-spacing: .03em;
   margin-bottom: 6px; font-weight: 600;
+}
+/* 标签前的铜色短刻线：把表单读成一张字段规格表 */
+.field label::before {
+  content: ''; width: 2px; height: 10px; background: var(--copper); opacity: .55; flex-shrink: 0;
 }
 .req { color: var(--danger); font-weight: 700; }
 .hint-inline { display: block; margin-top: 5px; font-size: 11.5px; color: var(--text-3); }

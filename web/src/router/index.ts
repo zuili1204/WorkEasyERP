@@ -3,6 +3,8 @@ import { auth } from '../stores/auth'
 
 const routes = [
   { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
+  /** 平台运营页：使用平台令牌（X-Platform-Token），不需要租户员工登录 */
+  { path: '/platform', name: 'platform-tenants', component: () => import('../views/PlatformTenantView.vue') },
   {
     path: '/',
     component: () => import('../layout/Layout.vue'),
@@ -47,6 +49,7 @@ const routes = [
       { path: 'crm/contracts', name: 'contracts', component: () => import('../views/ContractView.vue') },
       { path: 'purchase/requests', name: 'purchase-requests', component: () => import('../views/PurchaseReqView.vue') },
       { path: 'reports', name: 'reports', component: () => import('../views/ReportView.vue') },
+      { path: 'mall-admin', name: 'mall-admin', component: () => import('../views/MallAdminView.vue') },
     ],
   },
 ]
@@ -54,7 +57,7 @@ const routes = [
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to) => {
-  if (to.path !== '/login' && !auth.token) return '/login'
+  if (to.path !== '/login' && to.path !== '/platform' && !auth.token) return '/login'
   if (to.path === '/login' && auth.token) return '/'
   return true
 })

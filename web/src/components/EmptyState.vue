@@ -31,9 +31,11 @@ withDefaults(
   padding: 28px 20px;
 }
 .ico {
-  color: var(--text-4);
-  opacity: 0.4;
-  margin-bottom: 10px;
+  width: 58px; height: 58px; margin: 0 auto 12px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  background: #FCFBF7;
+  color: var(--text-4); opacity: .7;
 }
 .t {
   font-size: 14px;
