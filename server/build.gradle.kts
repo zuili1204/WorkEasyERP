@@ -37,6 +37,9 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
+    // 新增查询（报表 / 商城）走 MyBatis；存量 JPA、JdbcTemplate 不重写
+    implementation("org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.4")
+
     // 数据库迁移（DDL 以 Flyway 为准，JPA 不自动生成）
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")

@@ -5,14 +5,20 @@ import com.workeasy.erp.common.FieldPolicy
 import com.workeasy.erp.common.ErrorCode
 import com.workeasy.erp.config.JwtProvider
 import com.workeasy.erp.config.LoginUser
+import com.workeasy.erp.tenant.TenantContext
+import com.workeasy.erp.tenant.TenantRegistry
 import com.workeasy.erp.user.repository.UserRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
-data class LoginRequest(val username: String = "", val password: String = "")
+data class LoginRequest(
+    val username: String = "",
+    val password: String = "",
+    /** 登录租户；不传时沿用请求头 X-Tenant-Code，再退回 default */
+    val tenantCode: String = "",
+)
 
 data class LoginUserInfo(
     val id: String,
@@ -25,39 +31,58 @@ data class LoginUserInfo(
     val hiddenFields: List<String> = emptyList(),
 )
 
-data class LoginResponse(val token: String, val user: LoginUserInfo)
+data class LoginResponse(
+    val token: String,
+    val user: LoginUserInfo,
+    val tenantCode: String,
+    val tenantName: String,
+)
 
 @Service
 class AuthService(
     private val userRepo: UserRepository,
     private val jdbc: JdbcTemplate,
     private val jwt: JwtProvider,
+    private val tenants: TenantRegistry,
 ) {
     private val encoder = BCryptPasswordEncoder()
 
-    @Transactional
+    /**
+     * 登录不包事务：租户在方法内才确定，若提前开启事务，连接会被绑定到 default 库。
+     * 账号查询与 last_login 更新各自独立，均为单语句操作，无需跨语句事务。
+     */
     fun login(req: LoginRequest): LoginResponse {
-        val user = userRepo.findByUsername(req.username.trim())
-            ?: throw BizException(ErrorCode.AUTH_LOGIN_FAIL)
-        if (user.status != "active") throw BizException(ErrorCode.AUTH_DISABLED)
-        if (user.passwordHash.isNullOrBlank() || !encoder.matches(req.password, user.passwordHash)) {
-            throw BizException(ErrorCode.AUTH_LOGIN_FAIL)
+        // 登录接口未带 JWT：租户由请求体 / X-Tenant-Code / default 依次决定
+        val code = req.tenantCode.trim().ifBlank { TenantContext.codeOrDefault() }
+        val tenant = tenants.findByCode(code)
+            ?: throw BizException(ErrorCode.BIZ_PARAM, "租户不存在：$code")
+        if (!tenant.active) throw BizException(ErrorCode.AUTH_FORBIDDEN, "租户已停用：$code")
+
+        return TenantContext.withTenant(tenant.toInfo()) {
+            val user = userRepo.findByUsername(req.username.trim())
+                ?: throw BizException(ErrorCode.AUTH_LOGIN_FAIL)
+            if (user.status != "active") throw BizException(ErrorCode.AUTH_DISABLED)
+            if (user.passwordHash.isNullOrBlank() || !encoder.matches(req.password, user.passwordHash)) {
+                throw BizException(ErrorCode.AUTH_LOGIN_FAIL)
+            }
+            val uid = user.id ?: throw BizException(ErrorCode.AUTH_LOGIN_FAIL)
+            jdbc.update("UPDATE users SET last_login = now() WHERE id = ?", uid)
+            val lu = loadLoginUser(uid)
+            LoginResponse(
+                token = jwt.generate(uid.toString(), lu.username, tenant.id),
+                user = LoginUserInfo(
+                    id = uid.toString(),
+                    username = lu.username,
+                    displayName = lu.displayName,
+                    deptName = lu.deptName,
+                    roles = lu.roles,
+                    dataScope = lu.dataScope,
+                    hiddenFields = FieldPolicy.hiddenFields(lu.roles),
+                ),
+                tenantCode = tenant.code,
+                tenantName = tenant.name,
+            )
         }
-        val uid = user.id ?: throw BizException(ErrorCode.AUTH_LOGIN_FAIL)
-        jdbc.update("UPDATE users SET last_login = now() WHERE id = ?", uid)
-        val lu = loadLoginUser(uid)
-        return LoginResponse(
-            token = jwt.generate(uid.toString(), lu.username),
-            user = LoginUserInfo(
-                id = uid.toString(),
-                username = lu.username,
-                displayName = lu.displayName,
-                deptName = lu.deptName,
-                roles = lu.roles,
-                dataScope = lu.dataScope,
-                hiddenFields = FieldPolicy.hiddenFields(lu.roles),
-            ),
-        )
     }
 
     /** 加载登录用户（含角色与部门），供拦截器注入 UserContext */

@@ -1,5 +1,6 @@
 package com.workeasy.erp.system
 
+import com.workeasy.erp.tenant.TenantContext
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -7,13 +8,13 @@ import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.StandardCopyOption
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
- * 本地文件存储：按 `yyyy/MM/dd` 分目录，文件名用 UUID 避免重名与路径穿越。
+ * 本地文件存储：按 `租户/年/月/日` 分目录，文件名用 UUID 避免重名与路径穿越。
+ * default 租户沿用根目录（保持既有附件可读），其他租户落 `{code}/` 子目录实现磁盘级隔离。
  * 生产替换为对象存储（OSS/S3/MinIO）时，只需替换本实现，`attachment.storage_path` 语义不变。
  */
 @Service
@@ -35,7 +36,7 @@ class FileStorageService(
     /** 落盘并返回相对路径（供 attachment.storage_path 存储） */
     fun save(bytes: ByteArray, ext: String): String {
         val rel = "${LocalDate.now().format(dayFmt)}/${UUID.randomUUID()}${if (ext.isBlank()) "" else ".$ext"}"
-        val target = baseDir.resolve(rel)
+        val target = tenantDir().resolve(rel)
         Files.createDirectories(target.parent)
         Files.write(target, bytes)
         return rel
@@ -51,11 +52,18 @@ class FileStorageService(
         runCatching { Files.deleteIfExists(safeResolve(rel)) }
     }
 
-    /** 防路径穿越：解析后必须仍在 baseDir 内 */
+    /** 防路径穿越：解析后必须仍在当前租户目录内 */
     private fun safeResolve(rel: String): Path {
-        val p = baseDir.resolve(rel).normalize()
-        if (!p.startsWith(baseDir)) throw BizExceptionCompat.notFound("非法的附件路径")
+        val dir = tenantDir()
+        val p = dir.resolve(rel).normalize()
+        if (!p.startsWith(dir)) throw BizExceptionCompat.notFound("非法的附件路径")
         return p
+    }
+
+    /** default 租户沿用根目录，其余租户使用独立子目录 */
+    private fun tenantDir(): Path {
+        val code = TenantContext.codeOrDefault()
+        return if (code == TenantContext.DEFAULT_CODE) baseDir else baseDir.resolve(code)
     }
 }
 

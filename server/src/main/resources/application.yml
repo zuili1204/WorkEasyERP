@@ -1,6 +1,9 @@
 spring:
   application:
     name: workeasy-erp-server
+  profiles:
+    # 默认 dev：启用演示账号初始化；生产用 SPRING_PROFILES_ACTIVE=prod 关闭
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/workeasy}
     username: ${DB_USERNAME:workeasy}
@@ -20,9 +23,9 @@ spring:
           time_zone: UTC
         format_sql: false
   flyway:
-    enabled: true
+    # 关闭自动配置：平台库与租户库两套迁移由 TenantBootstrap 显式执行
+    enabled: false
     baseline-on-migrate: true
-    locations: classpath:db/migration
     validate-on-migrate: false
   servlet:
     multipart:
@@ -38,6 +41,14 @@ server:
   servlet:
     context-path: /api
 
+mybatis:
+  # 新增查询按 mapper/report、mapper/mall 分目录放 XML；接口与 XML 的 namespace 必须一致
+  mapper-locations: classpath:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    # 禁止 ${} 拼接（SQL 注入风险），统一用 #{} 参数绑定
+
 workeasy:
   jwt:
     secret: ${JWT_SECRET:workeasy-dev-secret-please-change-in-production-0123456789}
@@ -45,5 +56,30 @@ workeasy:
   audit:
     enabled: true
   storage:
-    # 附件落盘目录（相对路径基于服务启动目录）
+    # 附件落盘目录（相对路径基于服务启动目录；多租户按 code 分目录）
     dir: ./data/uploads
+  platform:
+    # 平台库（租户注册 / 平台会员 / 渠道配置）；首次启动自动建库，需 CREATEDB 权限
+    db:
+      url: ${PLATFORM_DB_URL:jdbc:postgresql://localhost:5432/workeasy_platform}
+      username: ${PLATFORM_DB_USERNAME:workeasy}
+      password: ${PLATFORM_DB_PASSWORD:workeasy123}
+      driver-class-name: org.postgresql.Driver
+      pool-size: 5
+    # 平台运维接口令牌（/platform/**），生产务必替换
+    admin-token: ${PLATFORM_ADMIN_TOKEN:workeasy-dev-platform-token}
+  tenant:
+    # 租户库连接池活跃上限（超出后回收空闲池）
+    max-active: 50
+    # 租户库口令密文（db_password_enc）的解密密钥
+    db-secret: ${TENANT_DB_SECRET:workeasy-dev-tenant-secret}
+  mall:
+    # 微信小程序：真实 AppID/商户号未就绪前走 mock（登录 code 换假 openid、支付直接成功回调）
+    wx:
+      mock: ${MALL_WX_MOCK:true}
+      app-id: ${MALL_WX_APP_ID:mock-appid}
+      mch-id: ${MALL_WX_MCH_ID:mock-mchid}
+      # 支付密钥（mock 模式仅用于本地验签演示）
+      pay-key: ${MALL_WX_PAY_KEY:workeasy-dev-pay-key}
+      # 真实回调地址需公网域名 + 备案，未就绪前留空
+      notify-base: ${MALL_WX_NOTIFY_BASE:}
